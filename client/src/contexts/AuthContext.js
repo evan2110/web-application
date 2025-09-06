@@ -48,33 +48,32 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (name, email, password, confirmPassword) => {
+  const register = async (email, password, userType) => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Simple validation
-      if (password !== confirmPassword) {
-        return { success: false, error: 'Passwords do not match' };
+      const response = await fetch('https://localhost:7297/api/Auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email,
+          password: password,
+          userType: userType
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Registration successful - don't auto login, just return success
+        return { success: true };
+      } else {
+        // Registration failed
+        return { success: false, error: data.message || 'Registration failed. Please try again.' };
       }
-      
-      if (password.length < 6) {
-        return { success: false, error: 'Password must be at least 6 characters' };
-      }
-      
-      // Simulate successful registration
-      const userData = {
-        id: Date.now(),
-        email: email,
-        name: name,
-        loginTime: new Date().toISOString()
-      };
-      
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
-      return { success: true };
     } catch (error) {
-      return { success: false, error: 'Registration failed. Please try again.' };
+      console.error('Registration error:', error);
+      return { success: false, error: 'Network error. Please check your connection and try again.' };
     }
   };
 

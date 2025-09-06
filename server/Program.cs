@@ -7,6 +7,18 @@ namespace server
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            // Add CORS
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll", policy =>
+                {
+                    policy.WithOrigins("http://localhost:3000")
+                        .AllowAnyMethod()
+                        .AllowAnyHeader()
+                        .AllowCredentials();
+                });
+            });
+
             // Add services to the container.
 
             builder.Services.AddControllers()
@@ -23,6 +35,9 @@ namespace server
             builder.Services.AddSwaggerGen();
 
             var app = builder.Build();
+
+            // Use CORS
+            app.UseCors("AllowAll");
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())

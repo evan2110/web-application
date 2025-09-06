@@ -4,10 +4,10 @@ import { useAuth } from '../contexts/AuthContext';
 
 const Register = () => {
   const [formData, setFormData] = useState({
-    name: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    userType: 'user'
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,21 +29,48 @@ const Register = () => {
     if (error) setError('');
   };
 
+  const validateForm = () => {
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError('Please enter a valid email address');
+      return false;
+    }
+
+    // Password length validation
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return false;
+    }
+
+    // Confirm password validation
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return false;
+    }
+
+    return true;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
+    if (!validateForm()) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const result = await register(
-        formData.name,
         formData.email,
         formData.password,
-        formData.confirmPassword
+        formData.userType
       );
       
       if (result.success) {
-        navigate('/');
+        navigate('/login?registered=true');
       } else {
         setError(result.error);
       }
@@ -65,19 +92,6 @@ const Register = () => {
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label htmlFor="name">Full Name</label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                required
-                placeholder="Enter your full name"
-              />
-            </div>
-
-            <div className="form-group">
               <label htmlFor="email">Email</label>
               <input
                 type="email"
@@ -88,6 +102,22 @@ const Register = () => {
                 required
                 placeholder="Enter your email"
               />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="userType">User Type</label>
+              <select
+                id="userType"
+                name="userType"
+                value={formData.userType}
+                onChange={handleChange}
+                required
+                className="form-control"
+                style={{ width: '100%', padding: '8px 12px', fontSize: '16px' }}
+              >
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
             </div>
 
             <div className="form-group">

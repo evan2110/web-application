@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import Toast from '../components/Toast';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -9,13 +10,22 @@ const Login = () => {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showToast, setShowToast] = useState(false);
   
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     document.title = 'Login - React App';
-  }, []);
+    
+    // Check if user just registered
+    if (location.search.includes('registered=true')) {
+      setShowToast(true);
+      // Clean up URL
+      navigate('/login', { replace: true });
+    }
+  }, [location.search, navigate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -111,6 +121,15 @@ const Login = () => {
           </div>
         </div>
       </div>
+      
+      {showToast && (
+        <Toast
+          message="Đã đăng ký thành công!"
+          type="success"
+          duration={3000}
+          onClose={() => setShowToast(false)}
+        />
+      )}
     </div>
   );
 };
