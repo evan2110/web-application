@@ -34,7 +34,7 @@ export const AuthProvider = ({ children }) => {
             setUser(JSON.parse(savedUser));
           } else {
             // Refresh failed, clear everything
-            logout();
+            await logout();
           }
         } else {
           // Access token is still valid
@@ -126,11 +126,36 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('access_token');
-    deleteCookie('refresh_token');
+  const logout = async () => {
+    try {
+      const refreshToken = getCookie('refresh_token');
+      
+      // Call logout API if refresh token exists
+      if (refreshToken) {
+        try {
+          await fetch('https://localhost:7297/api/Auth/logout', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              refreshToken: refreshToken
+            })
+          });
+        } catch (error) {
+          console.error('Logout API error:', error);
+          // Continue with local logout even if API fails
+        }
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      // Always clear local data
+      setUser(null);
+      localStorage.removeItem('user');
+      localStorage.removeItem('access_token');
+      deleteCookie('refresh_token');
+    }
   };
 
   const getAccessToken = () => {
@@ -176,12 +201,12 @@ export const AuthProvider = ({ children }) => {
         return { success: true, accessToken: data.access_token };
       } else {
         // Refresh failed, clear tokens and logout
-        logout();
+        await logout();
         return { success: false, error: data.message || 'Token refresh failed' };
       }
     } catch (error) {
       console.error('Token refresh error:', error);
-      logout();
+      await logout();
       return { success: false, error: 'Token refresh failed' };
     } finally {
       setTokenRefreshing(false);

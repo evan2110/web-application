@@ -97,7 +97,7 @@ namespace server.Controllers
                 Token = refreshTokenValue,
                 ExpiresAt = request.RememberMe
                     ? DateTime.Now.AddDays(30)
-                    : DateTime.Now.AddDays(1),
+                    : DateTime.Now.AddDays(_configuration.GetValue<int>("Jwt:RefreshTokenExpirationDays")),
                 CreatedAt = DateTime.Now,
                 RevokedAt = null
             };
@@ -172,6 +172,33 @@ namespace server.Controllers
                 access_token = newAccessToken,
                 refresh_token = newRefreshTokenValue
             });
+        }
+
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout([FromBody] RefreshDTO request)
+        {
+            if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            {
+                return BadRequest(new { message = "Refresh token is required." });
+            }
+
+            var refreshTokens = await _supabaseService.GetAllAsync<RefreshToken>();
+            var storedToken = refreshTokens.FirstOrDefault(e => e.Token == request.RefreshToken);
+
+            if (storedToken == null)
+            {
+                return NotFound(new { message = "Refresh token not found." });
+            }
+
+            // If was revoked 
+            if (storedToken.RevokedAt != null)
+            {
+                return BadRequest(new { message = "Refresh token already revoked." });
+            }
+
+            storedToken.RevokedAt = DateTime.Now;
+            await _supabaseService.UpdateAsync(storedToken);
+            return Ok(new { message = "Logged out successfully." });
         }
 
     }
