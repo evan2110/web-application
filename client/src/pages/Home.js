@@ -17,6 +17,13 @@ const Home = () => {
       <div className="text-center mb-4">
         <h1>Welcome to React App!</h1>
         <p>This is a comprehensive React application showcasing various components and hooks.</p>
+        {user && (
+          <div className="alert alert-info mt-3" role="alert">
+            <strong>Welcome back, {user.email}!</strong>
+            <br />
+            <small>User Type: <span className="badge bg-primary">{user.userType || 'User'}</span></small>
+          </div>
+        )}
       </div>
 
       {/* Tab Navigation */}

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { setCookie, getCookie, deleteCookie } from '../utils/cookieUtils';
+import { isTokenExpired, getTimeUntilExpiry } from '../utils/jwtUtils';
 
 const AuthContext = createContext();
 
@@ -14,17 +15,36 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [tokenRefreshing, setTokenRefreshing] = useState(false);
 
   // Check if user is logged in on app start
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    const accessToken = localStorage.getItem('access_token');
-    const refreshToken = getCookie('refresh_token');
-    
-    if (savedUser && accessToken) {
-      setUser(JSON.parse(savedUser));
-    }
-    setLoading(false);
+    const initializeAuth = async () => {
+      const savedUser = localStorage.getItem('user');
+      const accessToken = localStorage.getItem('access_token');
+      const refreshToken = getCookie('refresh_token');
+      
+      if (savedUser && accessToken && refreshToken) {
+        // Check if access token is expired
+        if (isTokenExpired(accessToken)) {
+          console.log('Access token expired, attempting refresh...');
+          const refreshResult = await refreshAccessToken();
+          
+          if (refreshResult.success) {
+            setUser(JSON.parse(savedUser));
+          } else {
+            // Refresh failed, clear everything
+            logout();
+          }
+        } else {
+          // Access token is still valid
+          setUser(JSON.parse(savedUser));
+        }
+      }
+      setLoading(false);
+    };
+
+    initializeAuth();
   }, []);
 
   const login = async (email, password, rememberMe = false) => {
@@ -121,6 +141,84 @@ export const AuthProvider = ({ children }) => {
     return getCookie('refresh_token');
   };
 
+  const refreshAccessToken = async () => {
+    try {
+      setTokenRefreshing(true);
+      const refreshToken = getCookie('refresh_token');
+      
+      if (!refreshToken) {
+        throw new Error('No refresh token available');
+      }
+
+      const response = await fetch('https://localhost:7297/api/Auth/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          refreshToken: refreshToken
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Update access token
+        if (data.access_token) {
+          localStorage.setItem('access_token', data.access_token);
+        }
+        
+        // Update refresh token if provided
+        if (data.refresh_token) {
+          setCookie('refresh_token', data.refresh_token, 30); // 30 days
+        }
+        
+        return { success: true, accessToken: data.access_token };
+      } else {
+        // Refresh failed, clear tokens and logout
+        logout();
+        return { success: false, error: data.message || 'Token refresh failed' };
+      }
+    } catch (error) {
+      console.error('Token refresh error:', error);
+      logout();
+      return { success: false, error: 'Token refresh failed' };
+    } finally {
+      setTokenRefreshing(false);
+    }
+  };
+
+  const checkAndRefreshToken = async () => {
+    const accessToken = localStorage.getItem('access_token');
+    const refreshToken = getCookie('refresh_token');
+    const savedUser = localStorage.getItem('user');
+    
+    // If no tokens, user is not logged in
+    if (!accessToken || !refreshToken) {
+      return false;
+    }
+    
+    // If access token is not expired, user is authenticated
+    if (!isTokenExpired(accessToken)) {
+      // Make sure user state is set if not already
+      if (!user && savedUser) {
+        setUser(JSON.parse(savedUser));
+      }
+      return true;
+    }
+    
+    // Access token is expired, try to refresh
+    console.log('Access token expired, attempting refresh...');
+    const refreshResult = await refreshAccessToken();
+    
+    if (refreshResult.success && savedUser) {
+      // Set user state after successful refresh
+      setUser(JSON.parse(savedUser));
+    }
+    
+    return refreshResult.success;
+  };
+
   const value = {
     user,
     login,
@@ -128,7 +226,10 @@ export const AuthProvider = ({ children }) => {
     logout,
     getAccessToken,
     getRefreshToken,
-    loading
+    refreshAccessToken,
+    checkAndRefreshToken,
+    loading,
+    tokenRefreshing
   };
 
   return (

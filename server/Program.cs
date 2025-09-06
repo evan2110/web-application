@@ -1,6 +1,7 @@
 ﻿
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using server.Middleware;
 using server.Models;
 using server.Services;
 using System.Text;
@@ -76,6 +77,8 @@ namespace server
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
+
+            app.UseMiddleware<TokenValidationMiddleware>();
 
             app.UseHttpsRedirection();
 

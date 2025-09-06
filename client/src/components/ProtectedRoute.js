@@ -1,24 +1,48 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, tokenRefreshing, checkAndRefreshToken } = useAuth();
   const navigate = useNavigate();
+  const [isCheckingToken, setIsCheckingToken] = useState(false);
 
+  // Check token when loading is complete
   useEffect(() => {
-    if (!loading && !user) {
-      // Redirect to login after a short delay to show the error message
+    const checkTokenAndRedirect = async () => {
+      if (!loading && !user) {
+        // No user, check if we can refresh token
+        setIsCheckingToken(true);
+        const isAuthenticated = await checkAndRefreshToken();
+        setIsCheckingToken(false);
+        
+        if (!isAuthenticated) {
+          // Still no user after refresh attempt, redirect to login
+          const timer = setTimeout(() => {
+            navigate('/login');
+          }, 3000);
+          
+          return () => clearTimeout(timer);
+        }
+      }
+    };
+
+    checkTokenAndRedirect();
+  }, [loading, checkAndRefreshToken, navigate]);
+
+  // Handle redirect when user becomes null after being authenticated
+  useEffect(() => {
+    if (!loading && !user && !isCheckingToken && !tokenRefreshing) {
       const timer = setTimeout(() => {
         navigate('/login');
       }, 3000);
       
       return () => clearTimeout(timer);
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, isCheckingToken, tokenRefreshing, navigate]);
 
-  // Show loading spinner while checking authentication
-  if (loading) {
+  // Show loading spinner while checking authentication or refreshing token
+  if (loading || tokenRefreshing || isCheckingToken) {
     return (
       <div className="container">
         <div className="d-flex justify-content-center align-items-center min-vh-100">
@@ -26,7 +50,11 @@ const ProtectedRoute = ({ children }) => {
             <div className="spinner-border text-primary" role="status">
               <span className="visually-hidden">Loading...</span>
             </div>
-            <p className="mt-3">Checking authentication...</p>
+            <p className="mt-3">
+              {tokenRefreshing ? 'Refreshing token...' : 
+               isCheckingToken ? 'Checking authentication...' : 
+               'Loading...'}
+            </p>
           </div>
         </div>
       </div>

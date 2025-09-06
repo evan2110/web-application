@@ -16,7 +16,7 @@ const Navbar = () => {
           {user ? (
             <>
               <li>
-                <Link to="/">Home</Link>
+                <Link to="/home">Home</Link>
               </li>
               <li>
                 <span>Welcome, {user.name}!</span>

@@ -11,7 +11,7 @@ import './App.css';
 // Public Route Component (redirect to home if already logged in)
 const PublicRoute = ({ children }) => {
   const { user } = useAuth();
-  return !user ? children : <Navigate to="/" />;
+  return !user ? children : <Navigate to="/home" />;
 };
 
 function App() {
@@ -24,6 +24,14 @@ function App() {
             <Routes>
               <Route 
                 path="/" 
+                element={
+                  <ProtectedRoute>
+                    <Home />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/home" 
                 element={
                   <ProtectedRoute>
                     <Home />

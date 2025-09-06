@@ -23,7 +23,7 @@ namespace server.Services
                 issuer: _configuration["Jwt:Issuer"],
                 audience: _configuration["Jwt:Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddHours(20),
+                expires: DateTime.Now.AddMinutes(Int32.Parse(_configuration["Jwt:AccessTokenExpirationMinutes"])),
                 signingCredentials: creds
             );
 

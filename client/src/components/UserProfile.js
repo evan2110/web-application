@@ -4,6 +4,7 @@ const UserProfile = ({ user }) => {
   const [profileData, setProfileData] = useState({
     name: user?.name || '',
     email: user?.email || '',
+    userType: user?.userType || '',
     bio: '',
     location: '',
     website: ''
@@ -41,6 +42,7 @@ const UserProfile = ({ user }) => {
     setProfileData({
       name: user?.name || '',
       email: user?.email || '',
+      userType: user?.userType || '',
       bio: profileData.bio,
       location: profileData.location,
       website: profileData.website
@@ -92,6 +94,27 @@ const UserProfile = ({ user }) => {
             />
           ) : (
             <p>{profileData.email}</p>
+          )}
+        </div>
+
+        <div className="form-group">
+          <label>User Type</label>
+          {isEditing ? (
+            <select
+              name="userType"
+              value={profileData.userType}
+              onChange={handleChange}
+              className="form-control"
+            >
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          ) : (
+            <p>
+              <span className={`badge ${profileData.userType === 'admin' ? 'bg-danger' : 'bg-primary'}`}>
+                {profileData.userType || 'User'}
+              </span>
+            </p>
           )}
         </div>
 
