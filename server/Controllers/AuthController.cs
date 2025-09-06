@@ -2,6 +2,7 @@
 using server.DTOs;
 using server.Models;
 using server.Services;
+using System.Data;
 
 namespace server.Controllers
 {
@@ -16,54 +17,44 @@ namespace server.Controllers
             _supabaseService = supabaseService;
         }
 
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<UserDto>>> GetAllUsers()
+        [HttpPost("register")]
+        public async Task<IActionResult> Register([FromBody] RegisterDTO request)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var users = await _supabaseService.GetAllAsync<User>();
+            if (users.Any(e => e.Email == request.Email))
+                return Conflict(new { message = "Email is already in use." });
 
-            var userDtos = users.Select(u => new UserDto
+            string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+
+            var newUser = new User
             {
-                Id = u.Id,
-                CreatedAt = u.CreatedAt,
-                Password = u.Password,
-                Email = u.Email,
-                UserType = u.UserType
-            });
+                Id = 0,
+                Email = request.Email,
+                Password = passwordHash,
+                UserType = request.UserType,
+                CreatedAt = DateTime.UtcNow,
+            };
 
-            return Ok(userDtos);
-        }
+            var createdUser = await _supabaseService.CreateAsync(newUser);
 
-        [HttpPost]
-        public async Task<ActionResult<UserDto>> CreateUser()
-        {
-            try
+            if (createdUser != null)
             {
-                var newUser = new User
+                var userDto = new UserDto
                 {
-                    Id = 0,
-                    Password = "TEST",
-                    Email = "TEST",
-                    UserType = "ADMIN",
-                    CreatedAt = DateTime.UtcNow
+                    Id = createdUser.Id,
+                    Email = createdUser.Email,
+                    Password = createdUser.Password,
+                    UserType = createdUser.UserType,
+                    CreatedAt = createdUser.CreatedAt
                 };
 
-                var createdUser = await _supabaseService.CreateAsync(newUser);
-                if (createdUser != null)
-                {
-                    var userDto = new UserDto
-                    {
-                        Id = createdUser.Id,
-                        CreatedAt = createdUser.CreatedAt
-                    };
-                    return Ok(userDto);
-                }
+                return Ok(userDto);
+            }
 
-                return BadRequest("Failed to create user");
-            }
-            catch (Exception ex)
-            {
-                return BadRequest($"Error: {ex.Message}");
-            }
+            return BadRequest("Failed to create user");
         }
 
     }

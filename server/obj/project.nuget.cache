@@ -1,9 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "sHSUL7mpGouYRlGsfOyQJbSk0ZtnJfNG4m4Hvap5gu2rqTX6UNi9T+FxF1/QAgvshEqQ+4XHcYKbcsWaa++qPw==",
+  "dgSpecHash": "VpYNX27SKgVMfUo5WL8XtE2LMkE2QpWK6mZQP3n13aUr4fH785tSRhbNyHwUzVYoilr+4Q+AMxjQVU6w6eFqYQ==",
   "success": true,
   "projectFilePath": "D:\\KaopizTest\\server\\server.csproj",
   "expectedPackageFiles": [
+    "C:\\Users\\duc21\\.nuget\\packages\\bcrypt.net-next\\4.0.3\\bcrypt.net-next.4.0.3.nupkg.sha512",
     "C:\\Users\\duc21\\.nuget\\packages\\microsoft.aspnetcore.openapi\\7.0.5\\microsoft.aspnetcore.openapi.7.0.5.nupkg.sha512",
     "C:\\Users\\duc21\\.nuget\\packages\\microsoft.extensions.apidescription.server\\6.0.5\\microsoft.extensions.apidescription.server.6.0.5.nupkg.sha512",
     "C:\\Users\\duc21\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.0\\microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
