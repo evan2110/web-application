@@ -1,4 +1,10 @@
 ﻿
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using server.Models;
+using server.Services;
+using System.Text;
+
 namespace server
 {
     public class Program
@@ -19,6 +25,30 @@ namespace server
                 });
             });
 
+            builder.Services.Configure<Jwt>(builder.Configuration.GetSection("Jwt"));
+            var jwtSettings = builder.Configuration.GetSection("Jwt").Get<Jwt>();
+
+            // Config Authentication with JWT
+            builder.Services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
+                .AddJwtBearer(options =>
+                {
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidateAudience = true,
+                        ValidateLifetime = true,
+                        ValidateIssuerSigningKey = true,
+                        ValidIssuer = jwtSettings.Issuer,
+                        ValidAudience = jwtSettings.Audience,
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
+                        ClockSkew = TimeSpan.Zero
+                    };
+                });
+
             // Add services to the container.
 
             builder.Services.AddControllers()
@@ -29,6 +59,7 @@ namespace server
                 });
 
             builder.Services.AddScoped<server.Services.ISupabaseService, server.Services.SupabaseService>();
+            builder.Services.AddScoped<ITokenService, TokenService>();
 
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
