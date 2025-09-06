@@ -8,8 +8,7 @@ namespace server.Models
     [Table("refresh_token")]
     public class RefreshToken : BaseModel, IEntityWithId
     {
-        [Key]
-        [Column("id")]
+        [PrimaryKey("id")]
         public int Id { get; set; }
 
         [Required]

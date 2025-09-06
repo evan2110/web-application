@@ -6,7 +6,8 @@ import Toast from '../components/Toast';
 const Login = () => {
   const [formData, setFormData] = useState({
     email: '',
-    password: ''
+    password: '',
+    rememberMe: false
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,10 +29,10 @@ const Login = () => {
   }, [location.search, navigate]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: type === 'checkbox' ? checked : value
     }));
     // Clear error when user starts typing
     if (error) setError('');
@@ -43,7 +44,7 @@ const Login = () => {
     setError('');
 
     try {
-      const result = await login(formData.email, formData.password);
+      const result = await login(formData.email, formData.password, formData.rememberMe);
       
       if (result.success) {
         navigate('/');
@@ -93,6 +94,22 @@ const Login = () => {
               />
             </div>
 
+            <div className="form-group">
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+                <input
+                  type="checkbox"
+                  id="rememberMe"
+                  name="rememberMe"
+                  checked={formData.rememberMe}
+                  onChange={handleChange}
+                  style={{ marginRight: '8px' }}
+                />
+                <label htmlFor="rememberMe" style={{ margin: 0, fontSize: '14px', color: '#333' }}>
+                  Remember me
+                </label>
+              </div>
+            </div>
+
             {error && <div className="error">{error}</div>}
 
             <button 
@@ -124,7 +141,7 @@ const Login = () => {
       
       {showToast && (
         <Toast
-          message="Đã đăng ký thành công!"
+          message="Registration successful!"
           type="success"
           duration={3000}
           onClose={() => setShowToast(false)}

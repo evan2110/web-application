@@ -87,31 +87,20 @@ namespace server.Controllers
             var accessToken = _tokenService.GenerateAccessToken(claims);
             var refreshTokenValue = _tokenService.GenerateRefreshToken();
 
-            // TODO: Save refresh token to DB when refresh_token table is created
-            // For now, just return the tokens without saving to DB
-            try
+            var refreshToken = new RefreshToken
             {
-                var refreshToken = new RefreshToken
-                {
-                    Id = 0,
-                    UserId = user.Id,
-                    Token = refreshTokenValue,
-                    ExpiresAt = request.RememberMe
-                        ? DateTime.Now.AddDays(30)
-                        : DateTime.Now.AddDays(1),
-                    CreatedAt = DateTime.Now,
-                    RevokedAt = null
-                };
+                Id = 0,
+                UserId = user.Id,
+                Token = refreshTokenValue,
+                ExpiresAt = request.RememberMe
+                    ? DateTime.Now.AddDays(30)
+                    : DateTime.Now.AddDays(1),
+                CreatedAt = DateTime.Now,
+                RevokedAt = null
+            };
 
-                // Try to save refresh token, but don't fail if table doesn't exist
-                await _supabaseService.CreateAsync(refreshToken);
-            }
-            catch (Exception ex)
-            {
-                // Log the error but continue with login
-                Console.WriteLine($"Warning: Could not save refresh token: {ex.Message}");
-            }
-
+            await _supabaseService.CreateAsync(refreshToken);
+            
             return Ok(new
             {
                 user = new

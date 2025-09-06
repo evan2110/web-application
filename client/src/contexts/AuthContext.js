@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { setCookie, getCookie, deleteCookie } from '../utils/cookieUtils';
 
 const AuthContext = createContext();
 
@@ -17,34 +18,62 @@ export const AuthProvider = ({ children }) => {
   // Check if user is logged in on app start
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
-    if (savedUser) {
+    const accessToken = localStorage.getItem('access_token');
+    const refreshToken = getCookie('refresh_token');
+    
+    if (savedUser && accessToken) {
       setUser(JSON.parse(savedUser));
     }
     setLoading(false);
   }, []);
 
-  const login = async (email, password) => {
+  const login = async (email, password, rememberMe = false) => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Simple validation (in real app, this would be server-side)
-      if (email === 'admin@example.com' && password === 'password') {
-        const userData = {
-          id: 1,
+      const response = await fetch('https://localhost:7297/api/Auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           email: email,
-          name: 'Admin User',
+          password: password,
+          rememberMe: rememberMe
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Login successful
+        const userData = {
+          id: data.user.id,
+          email: data.user.email,
+          userType: data.user.userType,
           loginTime: new Date().toISOString()
         };
         
         setUser(userData);
         localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Store access_token in localStorage
+        if (data.access_token) {
+          localStorage.setItem('access_token', data.access_token);
+        }
+        
+        // Store refresh_token in cookie
+        if (data.refresh_token) {
+          const cookieExpiryDays = rememberMe ? 30 : 1; // 30 days if remember me, 1 day otherwise
+          setCookie('refresh_token', data.refresh_token, cookieExpiryDays);
+        }
+        
         return { success: true };
       } else {
-        return { success: false, error: 'Invalid email or password' };
+        // Login failed
+        return { success: false, error: data.message || 'Login failed. Please try again.' };
       }
     } catch (error) {
-      return { success: false, error: 'Login failed. Please try again.' };
+      console.error('Login error:', error);
+      return { success: false, error: 'Network error. Please check your connection and try again.' };
     }
   };
 
@@ -80,6 +109,16 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('access_token');
+    deleteCookie('refresh_token');
+  };
+
+  const getAccessToken = () => {
+    return localStorage.getItem('access_token');
+  };
+
+  const getRefreshToken = () => {
+    return getCookie('refresh_token');
   };
 
   const value = {
@@ -87,6 +126,8 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    getAccessToken,
+    getRefreshToken,
     loading
   };
 
