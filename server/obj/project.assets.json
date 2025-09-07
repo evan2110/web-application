@@ -28,22 +28,6 @@
           }
         }
       },
-      "GoogleAuthenticator/3.2.0": {
-        "type": "package",
-        "dependencies": {
-          "QRCoder": "1.4.3"
-        },
-        "compile": {
-          "lib/netstandard2.0/Google.Authenticator.dll": {
-            "related": ".pdb"
-          }
-        },
-        "runtime": {
-          "lib/netstandard2.0/Google.Authenticator.dll": {
-            "related": ".pdb"
-          }
-        }
-      },
       "MailKit/4.13.0": {
         "type": "package",
         "dependencies": {
@@ -343,15 +327,6 @@
           "lib/net6.0/Newtonsoft.Json.dll": {
             "related": ".xml"
           }
-        }
-      },
-      "QRCoder/1.6.0": {
-        "type": "package",
-        "compile": {
-          "lib/net6.0/QRCoder.dll": {}
-        },
-        "runtime": {
-          "lib/net6.0/QRCoder.dll": {}
         }
       },
       "Supabase/1.1.1": {
@@ -724,22 +699,6 @@
         "lib/netstandard2.0/BouncyCastle.Cryptography.dll",
         "lib/netstandard2.0/BouncyCastle.Cryptography.xml",
         "packageIcon.png"
-      ]
-    },
-    "GoogleAuthenticator/3.2.0": {
-      "sha512": "m+wR3/c6ra2h7gaov7qUDRxOaC6B2/t7H6JsMPTHecvrEJyMz2NsgJqIU4RJwEhOzeauHkKVZDopz3OTo7rpRw==",
-      "type": "package",
-      "path": "googleauthenticator/3.2.0",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "README.md",
-        "googleauthenticator.3.2.0.nupkg.sha512",
-        "googleauthenticator.nuspec",
-        "lib/net462/Google.Authenticator.dll",
-        "lib/net462/Google.Authenticator.pdb",
-        "lib/netstandard2.0/Google.Authenticator.dll",
-        "lib/netstandard2.0/Google.Authenticator.pdb"
       ]
     },
     "MailKit/4.13.0": {
@@ -1453,27 +1412,6 @@
         "packageIcon.png"
       ]
     },
-    "QRCoder/1.6.0": {
-      "sha512": "XmPA81eo+oRxBuyVdswsSkTGTE1d3thfF11Z1PdD7oB56A6HU4G4AAOdySmGRMb/cljwlFTMWUtosGEnwpS6GA==",
-      "type": "package",
-      "path": "qrcoder/1.6.0",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "lib/net35/QRCoder.dll",
-        "lib/net40/QRCoder.dll",
-        "lib/net5.0-windows7.0/QRCoder.dll",
-        "lib/net5.0/QRCoder.dll",
-        "lib/net6.0-windows7.0/QRCoder.dll",
-        "lib/net6.0/QRCoder.dll",
-        "lib/netstandard1.3/QRCoder.dll",
-        "lib/netstandard2.0/QRCoder.dll",
-        "nuget-icon.png",
-        "nuget-readme.md",
-        "qrcoder.1.6.0.nupkg.sha512",
-        "qrcoder.nuspec"
-      ]
-    },
     "Supabase/1.1.1": {
       "sha512": "LW9O05IiZBW3YUDT/gndPKvzT3I7PVgx0j87+AdJu7mT42m7oh2nOnjuDR9pU0E9FE2Ke/QGovrH/u5OjGn7lg==",
       "type": "package",
@@ -1880,12 +1818,10 @@
   "projectFileDependencyGroups": {
     "net7.0": [
       "BCrypt.Net-Next >= 4.0.3",
-      "GoogleAuthenticator >= 3.2.0",
       "MailKit >= 4.13.0",
       "Microsoft.AspNetCore.Authentication.JwtBearer >= 7.0.20",
       "Microsoft.AspNetCore.OpenApi >= 7.0.5",
       "MimeKit >= 4.13.0",
-      "QRCoder >= 1.6.0",
       "Supabase >= 1.1.1",
       "Swashbuckle.AspNetCore >= 6.4.0",
       "System.IdentityModel.Tokens.Jwt >= 8.14.0"
@@ -1935,10 +1871,6 @@
             "target": "Package",
             "version": "[4.0.3, )"
           },
-          "GoogleAuthenticator": {
-            "target": "Package",
-            "version": "[3.2.0, )"
-          },
           "MailKit": {
             "target": "Package",
             "version": "[4.13.0, )"
@@ -1954,10 +1886,6 @@
           "MimeKit": {
             "target": "Package",
             "version": "[4.13.0, )"
-          },
-          "QRCoder": {
-            "target": "Package",
-            "version": "[1.6.0, )"
           },
           "Supabase": {
             "target": "Package",

@@ -87,6 +87,14 @@ export const AuthProvider = ({ children }) => {
         }
         
         return { success: true };
+      } else if (response.status === 409) {
+        // Requires verification - return user info for verification
+        return { 
+          success: false, 
+          requiresVerification: true, 
+          email: email,
+          message: data.message || 'Please verify your email to complete login.'
+        };
       } else {
         // Login failed
         return { success: false, error: data.message || 'Login failed. Please try again.' };
@@ -213,6 +221,67 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const verifyCode = async (email, code, rememberMe = false) => {
+    try {
+      console.log('Verifying code...');
+      console.log('Email:', email);
+      console.log('Code:', code);
+      console.log('RememberMe:', rememberMe);
+      
+      const requestBody = {
+        email: email,
+        userCodeVerify: code,
+        rememberMe: rememberMe
+      };
+      
+      console.log('Request body:', requestBody);
+      
+      const verifyResponse = await fetch('https://localhost:7297/api/Auth/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      const verifyData = await verifyResponse.json();
+      
+      console.log('Response status:', verifyResponse.status);
+      console.log('Response data:', verifyData);
+
+      if (verifyResponse.ok) {
+        // Verification successful - API now returns user data and tokens
+        const userData = {
+          id: verifyData.user.id,
+          email: verifyData.user.email,
+          userType: verifyData.user.userType,
+          loginTime: new Date().toISOString()
+        };
+        
+        setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Store access_token in localStorage
+        if (verifyData.access_token) {
+          localStorage.setItem('access_token', verifyData.access_token);
+        }
+        
+        // Store refresh_token in cookie
+        if (verifyData.refresh_token) {
+          const cookieExpiryDays = rememberMe ? 30 : 1;
+          setCookie('refresh_token', verifyData.refresh_token, cookieExpiryDays);
+        }
+        
+        return { success: true };
+      } else {
+        return { success: false, error: verifyData.message || 'Verification failed. Please try again.' };
+      }
+    } catch (error) {
+      console.error('Verification error:', error);
+      return { success: false, error: 'Network error. Please check your connection and try again.' };
+    }
+  };
+
   const checkAndRefreshToken = async () => {
     const accessToken = localStorage.getItem('access_token');
     const refreshToken = getCookie('refresh_token');
@@ -249,6 +318,7 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    verifyCode,
     getAccessToken,
     getRefreshToken,
     refreshAccessToken,

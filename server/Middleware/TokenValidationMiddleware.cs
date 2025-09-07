@@ -5,7 +5,7 @@ namespace server.Middleware
     public class TokenValidationMiddleware
     {
         private readonly RequestDelegate _next;
-        private readonly string[] _excludedPaths = new[] { "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/logout", "/" };
+        private readonly string[] _excludedPaths = new[] { "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/logout", "/api/auth/verify", "/api/auth/sendmail" };
 
         public TokenValidationMiddleware(RequestDelegate next)
         {
