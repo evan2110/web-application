@@ -33,8 +33,18 @@ namespace server.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterDTO request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            if (string.IsNullOrEmpty(request.Email.Trim()) || string.IsNullOrEmpty(request.Password.Trim()) || string.IsNullOrEmpty(request.UserType.Trim()))
+                return BadRequest(new { message = "Invalid request." });
+
+            if (request.Password.Trim().Length < 6)
+            {
+                return BadRequest(new { message = "Password must greater than 6." });
+            }
+
+            if (!CommonUtils.IsValidEmail(request.Email.Trim()))
+            {
+                return BadRequest(new { message = "Email is wrong format." });
+            }
 
             var users = await _supabaseService.GetAllAsync<User>();
             if (users.Any(e => e.Email == request.Email))
@@ -73,8 +83,18 @@ namespace server.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDTO request)
         {       
-            if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
+            if (string.IsNullOrEmpty(request.Email.Trim()) || string.IsNullOrEmpty(request.Password.Trim()))
                 return BadRequest(new { message = "Email and password are required." });
+
+            if (request.Password.Trim().Length < 6)
+            {
+                return BadRequest(new { message = "Password must greater than 6." });
+            }
+
+            if (!CommonUtils.IsValidEmail(request.Email.Trim()))
+            {
+                return BadRequest(new { message = "Email is wrong format." });
+            }
 
             var users = await _supabaseService.GetAllAsync<User>();
 
@@ -126,7 +146,7 @@ namespace server.Controllers
         [HttpPost("refresh")]
         public async Task<IActionResult> Refresh([FromBody] RefreshDTO request)
         {
-            if (string.IsNullOrEmpty(request.RefreshToken))
+            if (string.IsNullOrEmpty(request.RefreshToken.Trim()))
                 return BadRequest(new { message = "Refresh token is required." });
 
             var refreshTokens = await _supabaseService.GetAllAsync<RefreshToken>();
@@ -181,9 +201,9 @@ namespace server.Controllers
         [HttpPost("logout")]
         public async Task<IActionResult> Logout([FromBody] LogoutDTO request)
         {
-            if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            if (string.IsNullOrWhiteSpace(request.RefreshToken.Trim()) || string.IsNullOrWhiteSpace(request.AccessToken.Trim()))
             {
-                return BadRequest(new { message = "Refresh token is required." });
+                return BadRequest(new { message = "Invalid request." });
             }
 
             var refreshTokens = await _supabaseService.GetAllAsync<RefreshToken>();
@@ -216,14 +236,18 @@ namespace server.Controllers
         [HttpPost("verify")]
         public async Task<IActionResult> VerifyUser([FromBody] VerifyUserDTO request)
         {
-            if (string.IsNullOrWhiteSpace(request.UserCodeVerify))
+            if (string.IsNullOrWhiteSpace(request.UserCodeVerify.Trim()))
             {
                 return BadRequest(new { message = "Verify code is required." });
             }
-            if (string.IsNullOrWhiteSpace(request.Email))
+            if (string.IsNullOrWhiteSpace(request.Email.Trim()))
             {
 
                 return BadRequest(new { message = "Email is required." });
+            }
+            if (!CommonUtils.IsValidEmail(request.Email.Trim()))
+            {
+                return BadRequest(new { message = "Email is wrong format." });
             }
             if (request.UserCodeVerify.Trim().Length < 6)
             {
@@ -258,6 +282,10 @@ namespace server.Controllers
             {
 
                 return BadRequest(new { message = "Email is required." });
+            }
+            if (!CommonUtils.IsValidEmail(email))
+            {
+                return BadRequest(new { message = "Email is wrong format." });
             }
             var users = await _supabaseService.GetAllAsync<User>();
             var user = users.FirstOrDefault(e => e.Email == email);

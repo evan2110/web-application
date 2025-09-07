@@ -13,7 +13,6 @@ namespace server.Models
 
         [Required]
         [Column("email")]
-        [MaxLength(255)]
         public string Email { get; set; } = string.Empty;
 
         [Required]
