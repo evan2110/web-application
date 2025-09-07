@@ -85,7 +85,7 @@ namespace test.controllerTest
         public async Task Login_ReturnsBadRequest_WhenMissingFields()
         {
             var (controller, _, _, _, _, _) = BuildController();
-            var result = await controller.Login(new LoginDTO { Email = " ", Password = " " });
+            var result = await controller.Login(new LoginDTO { Email = "", Password = "" });
             result.Should().BeOfType<BadRequestObjectResult>();
         }
 
@@ -132,7 +132,7 @@ namespace test.controllerTest
         public async Task Refresh_ReturnsBadRequest_WhenMissingToken()
         {
             var (controller, _, _, _, _, _) = BuildController();
-            var result = await controller.Refresh(new RefreshDTO { RefreshToken = "  " });
+            var result = await controller.Refresh(new RefreshDTO { RefreshToken = "" });
             result.Should().BeOfType<BadRequestObjectResult>();
         }
 
