@@ -34,6 +34,7 @@ const getUserFromToken = (accessToken) => {
 };
 
 export const AuthProvider = ({ children }) => {
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://localhost:7297';
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tokenRefreshing, setTokenRefreshing] = useState(false);
@@ -84,7 +85,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password, rememberMe = false) => {
     try {
-      const response = await fetch('https://localhost:7297/api/Auth/login', {
+      const response = await fetch(`${API_BASE_URL}/api/Auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -143,7 +144,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (email, password, userType) => {
     try {
-      const response = await fetch('https://localhost:7297/api/Auth/register', {
+      const response = await fetch(`${API_BASE_URL}/api/Auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -178,7 +179,7 @@ export const AuthProvider = ({ children }) => {
       // Call logout API if refresh token exists
       if (refreshToken) {
         try {
-          const response = await fetch('https://localhost:7297/api/Auth/logout', {
+          const response = await fetch(`${API_BASE_URL}/api/Auth/logout`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -227,7 +228,7 @@ export const AuthProvider = ({ children }) => {
         throw new Error('No refresh token available');
       }
 
-      const response = await fetch('https://localhost:7297/api/Auth/refresh', {
+      const response = await fetch(`${API_BASE_URL}/api/Auth/refresh`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -281,7 +282,7 @@ export const AuthProvider = ({ children }) => {
       
       console.log('Request body:', requestBody);
       
-      const verifyResponse = await fetch('https://localhost:7297/api/Auth/verify', {
+      const verifyResponse = await fetch(`${API_BASE_URL}/api/Auth/verify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

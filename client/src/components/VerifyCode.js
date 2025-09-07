@@ -7,6 +7,7 @@ const VerifyCode = ({
   onBack, 
   onError 
 }) => {
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://localhost:7297';
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
@@ -76,7 +77,7 @@ const VerifyCode = ({
     setError('');
 
     try {
-      const response = await fetch(`https://localhost:7297/api/Auth/sendMail?email=${encodeURIComponent(email)}`, {
+      const response = await fetch(`${API_BASE_URL}/api/Auth/sendMail?email=${encodeURIComponent(email)}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
