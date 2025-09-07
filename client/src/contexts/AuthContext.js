@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { setCookie, getCookie, deleteCookie } from '../utils/cookieUtils';
-import { isTokenExpired, getTimeUntilExpiry } from '../utils/jwtUtils';
+import { isTokenExpired, getTimeUntilExpiry, decodeJWT } from '../utils/jwtUtils';
 
 const AuthContext = createContext();
 
@@ -12,6 +12,27 @@ export const useAuth = () => {
   return context;
 };
 
+// Function to get user info from access token
+const getUserFromToken = (accessToken) => {
+  try {
+    if (!accessToken) return null;
+    
+    const decoded = decodeJWT(accessToken);
+    if (!decoded) return null;
+    
+    // Extract user information from token claims using the correct Microsoft claims format
+    return {
+      id: decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] || decoded.sub || decoded.userId || decoded.id,
+      email: decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] || decoded.email || decoded.email_address,
+      userType: decoded['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || decoded.userType || decoded.role || decoded.user_type || 'User',
+      loginTime: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error getting user from token:', error);
+    return null;
+  }
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -20,25 +41,39 @@ export const AuthProvider = ({ children }) => {
   // Check if user is logged in on app start
   useEffect(() => {
     const initializeAuth = async () => {
-      const savedUser = localStorage.getItem('user');
       const accessToken = localStorage.getItem('access_token');
       const refreshToken = getCookie('refresh_token');
       
-      if (savedUser && accessToken && refreshToken) {
+      if (accessToken && refreshToken) {
         // Check if access token is expired
         if (isTokenExpired(accessToken)) {
           console.log('Access token expired, attempting refresh...');
           const refreshResult = await refreshAccessToken();
           
           if (refreshResult.success) {
-            setUser(JSON.parse(savedUser));
+            // Get user info from refreshed token
+            const userFromToken = getUserFromToken(refreshResult.accessToken);
+            if (userFromToken) {
+              setUser(userFromToken);
+              localStorage.setItem('user', JSON.stringify(userFromToken));
+            }
           } else {
             // Refresh failed, clear everything
             await logout();
           }
         } else {
-          // Access token is still valid
-          setUser(JSON.parse(savedUser));
+          // Access token is still valid, get user info from token
+          const userFromToken = getUserFromToken(accessToken);
+          if (userFromToken) {
+            setUser(userFromToken);
+            localStorage.setItem('user', JSON.stringify(userFromToken));
+          } else {
+            // Fallback to saved user data if token decode fails
+            const savedUser = localStorage.getItem('user');
+            if (savedUser) {
+              setUser(JSON.parse(savedUser));
+            }
+          }
         }
       }
       setLoading(false);
@@ -64,11 +99,12 @@ export const AuthProvider = ({ children }) => {
       const data = await response.json();
 
       if (response.ok) {
-        // Login successful
-        const userData = {
-          id: data.user.id,
-          email: data.user.email,
-          userType: data.user.userType,
+        // Login successful - get user info from access token
+        const userFromToken = getUserFromToken(data.access_token);
+        const userData = userFromToken || {
+          id: data.user?.id,
+          email: data.user?.email,
+          userType: data.user?.userType || 'User',
           loginTime: new Date().toISOString()
         };
         
@@ -250,11 +286,12 @@ export const AuthProvider = ({ children }) => {
       console.log('Response data:', verifyData);
 
       if (verifyResponse.ok) {
-        // Verification successful - API now returns user data and tokens
-        const userData = {
-          id: verifyData.user.id,
-          email: verifyData.user.email,
-          userType: verifyData.user.userType,
+        // Verification successful - get user info from access token
+        const userFromToken = getUserFromToken(verifyData.access_token);
+        const userData = userFromToken || {
+          id: verifyData.user?.id,
+          email: verifyData.user?.email,
+          userType: verifyData.user?.userType || 'User',
           loginTime: new Date().toISOString()
         };
         
@@ -285,7 +322,6 @@ export const AuthProvider = ({ children }) => {
   const checkAndRefreshToken = async () => {
     const accessToken = localStorage.getItem('access_token');
     const refreshToken = getCookie('refresh_token');
-    const savedUser = localStorage.getItem('user');
     
     // If no tokens, user is not logged in
     if (!accessToken || !refreshToken) {
@@ -294,9 +330,11 @@ export const AuthProvider = ({ children }) => {
     
     // If access token is not expired, user is authenticated
     if (!isTokenExpired(accessToken)) {
-      // Make sure user state is set if not already
-      if (!user && savedUser) {
-        setUser(JSON.parse(savedUser));
+      // Get user info from token and update state if needed
+      const userFromToken = getUserFromToken(accessToken);
+      if (userFromToken && (!user || user.id !== userFromToken.id)) {
+        setUser(userFromToken);
+        localStorage.setItem('user', JSON.stringify(userFromToken));
       }
       return true;
     }
@@ -305,9 +343,13 @@ export const AuthProvider = ({ children }) => {
     console.log('Access token expired, attempting refresh...');
     const refreshResult = await refreshAccessToken();
     
-    if (refreshResult.success && savedUser) {
-      // Set user state after successful refresh
-      setUser(JSON.parse(savedUser));
+    if (refreshResult.success) {
+      // Get user info from refreshed token
+      const userFromToken = getUserFromToken(refreshResult.accessToken);
+      if (userFromToken) {
+        setUser(userFromToken);
+        localStorage.setItem('user', JSON.stringify(userFromToken));
+      }
     }
     
     return refreshResult.success;

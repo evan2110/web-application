@@ -1,16 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { decodeJWT } from '../utils/jwtUtils';
 import UserProfile from '../components/UserProfile';
 import TodoList from '../components/TodoList';
 import Counter from '../components/Counter';
 
 const Home = () => {
-  const { user } = useAuth();
+  const { user, getAccessToken } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
+  const [tokenInfo, setTokenInfo] = useState(null);
 
   useEffect(() => {
     document.title = 'Home - React App';
-  }, []);
+    
+    // Debug: Decode token to show token information
+    const accessToken = getAccessToken();
+    if (accessToken) {
+      const decoded = decodeJWT(accessToken);
+      setTokenInfo(decoded);
+      console.log('Decoded token:', decoded);
+    }
+  }, [getAccessToken]);
 
   return (
     <div className="container">

@@ -13,13 +13,23 @@ const UserProfile = ({ user }) => {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
+    // Update profile data when user changes (from token)
+    if (user) {
+      setProfileData(prev => ({
+        ...prev,
+        email: user.email || prev.email,
+        userType: user.userType || prev.userType,
+        name: user.name || prev.name
+      }));
+    }
+    
     // Load additional profile data from localStorage
     const savedProfile = localStorage.getItem('userProfile');
     if (savedProfile) {
       const parsedProfile = JSON.parse(savedProfile);
       setProfileData(prev => ({ ...prev, ...parsedProfile }));
     }
-  }, []);
+  }, [user]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
