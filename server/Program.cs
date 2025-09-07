@@ -61,8 +61,12 @@ namespace server
 
             builder.Services.AddScoped<server.Services.ISupabaseService, server.Services.SupabaseService>();
             builder.Services.AddScoped<ITokenService, TokenService>();
+            builder.Services.AddScoped<IBlacklistService, BlacklistService>();
             builder.Services.AddTransient<IMailService, MailService>();
             builder.Services.Configure<MailSettingsDTO>(builder.Configuration.GetSection("MailSettingsDTO"));
+            
+            // Add background service for cleanup
+            builder.Services.AddHostedService<BlacklistCleanupService>();
 
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();

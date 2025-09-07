@@ -7,5 +7,6 @@ namespace server.Services
         string GenerateAccessToken(IEnumerable<Claim> claims);
         string GenerateRefreshToken();
         bool ValidateAccessToken(string token);
+        Task<bool> ValidateAccessTokenWithBlacklistAsync(string token);
     }
 }

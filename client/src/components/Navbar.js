@@ -19,7 +19,7 @@ const Navbar = () => {
                 <Link to="/home">Home</Link>
               </li>
               <li>
-                <span>Welcome, {user.name}!</span>
+                <span>Welcome, {user.email}!</span>
               </li>
               <li>
                 <button 

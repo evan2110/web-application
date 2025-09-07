@@ -9,10 +9,12 @@ namespace server.Services
     public class TokenService : ITokenService
     {
         private readonly IConfiguration _configuration;
+        private readonly IBlacklistService _blacklistService;
 
-        public TokenService(IConfiguration configuration)
+        public TokenService(IConfiguration configuration, IBlacklistService blacklistService)
         {
             _configuration = configuration;
+            _blacklistService = blacklistService;
         }
 
         public string GenerateAccessToken(IEnumerable<Claim> claims)
@@ -82,6 +84,17 @@ namespace server.Services
                 // others
                 return false;
             }
+        }
+
+        public async Task<bool> ValidateAccessTokenWithBlacklistAsync(string token)
+        {
+            // First validate the token structure and signature
+            if (!ValidateAccessToken(token))
+                return false;
+
+            // Then check if token is blacklisted
+            var isBlacklisted = await _blacklistService.IsTokenBlacklistedAsync(token);
+            return !isBlacklisted;
         }
     }
 }

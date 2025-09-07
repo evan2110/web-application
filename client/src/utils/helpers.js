@@ -57,3 +57,38 @@ export const debounce = (func, wait) => {
     timeout = setTimeout(later, wait);
   };
 };
+
+// API call helper with blacklist error handling
+export const apiCall = async (url, options = {}) => {
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+
+    // Check if response indicates token is blacklisted
+    if (response.status === 401) {
+      const data = await response.json().catch(() => ({}));
+      if (data.message && data.message.includes('blacklisted')) {
+        // Token is blacklisted, clear local storage and redirect to login
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        throw new Error('Token has been blacklisted. Please login again.');
+      }
+    }
+
+    return response;
+  } catch (error) {
+    console.error('API call error:', error);
+    throw error;
+  }
+};
+
+// Helper to check if error is related to blacklisted token
+export const isBlacklistError = (error) => {
+  return error.message && error.message.includes('blacklisted');
+};

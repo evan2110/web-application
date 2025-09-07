@@ -19,14 +19,15 @@ namespace server.Controllers
         private readonly ITokenService _tokenService;
         private readonly IConfiguration _configuration;
         private readonly IMailService _mail;
+        private readonly IBlacklistService _blacklistService;
 
-        public AuthController(ISupabaseService supabaseService, ITokenService tokenService, IConfiguration configuration, IMailService mail)
+        public AuthController(ISupabaseService supabaseService, ITokenService tokenService, IConfiguration configuration, IMailService mail, IBlacklistService blacklistService)
         {
             _supabaseService = supabaseService;
             _tokenService = tokenService;
             _configuration = configuration;
             _mail = mail;
-
+            _blacklistService = blacklistService;
         }
 
         [HttpPost("register")]
@@ -178,7 +179,7 @@ namespace server.Controllers
         }
 
         [HttpPost("logout")]
-        public async Task<IActionResult> Logout([FromBody] RefreshDTO request)
+        public async Task<IActionResult> Logout([FromBody] LogoutDTO request)
         {
             if (string.IsNullOrWhiteSpace(request.RefreshToken))
             {
@@ -199,8 +200,16 @@ namespace server.Controllers
                 return BadRequest(new { message = "Refresh token already revoked." });
             }
 
+            // Add access token to blacklist if provided
+            if (!string.IsNullOrWhiteSpace(request.AccessToken))
+            {
+                await _blacklistService.AddTokenToBlacklistAsync(request.AccessToken, storedToken.UserId, "User logout");
+            }
+
+            // Revoke refresh token
             storedToken.RevokedAt = DateTime.Now;
             await _supabaseService.UpdateAsync(storedToken);
+            
             return Ok(new { message = "Logged out successfully." });
         }
 
@@ -311,6 +320,7 @@ namespace server.Controllers
                 refresh_token = refreshTokenValue
             };
         }
+
 
         private async Task SendVerificationEmailAsync(string toEmail, string code)
         {

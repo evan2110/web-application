@@ -30,15 +30,15 @@ namespace server.Middleware
                 return;
             }
 
-            var isValid = tokenService.ValidateAccessToken(token);
+            var isValid = await tokenService.ValidateAccessTokenWithBlacklistAsync(token);
             if (!isValid)
             {
                 context.Response.StatusCode = 401;
-                await context.Response.WriteAsync("Access token invalid or expired");
+                await context.Response.WriteAsync("Access token invalid, expired, or blacklisted");
                 return;
             }
 
-            // If value, continue
+            // If valid, continue
             await _next(context);
         }
     }

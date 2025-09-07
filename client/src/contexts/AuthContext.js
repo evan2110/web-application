@@ -172,20 +172,28 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      const accessToken = localStorage.getItem('access_token');
       const refreshToken = getCookie('refresh_token');
       
       // Call logout API if refresh token exists
       if (refreshToken) {
         try {
-          await fetch('https://localhost:7297/api/Auth/logout', {
+          const response = await fetch('https://localhost:7297/api/Auth/logout', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
+              accessToken: accessToken,
               refreshToken: refreshToken
             })
           });
+
+          if (response.ok) {
+            console.log('Logout successful - access token blacklisted');
+          } else {
+            console.warn('Logout API returned error:', response.status);
+          }
         } catch (error) {
           console.error('Logout API error:', error);
           // Continue with local logout even if API fails
@@ -245,6 +253,7 @@ export const AuthProvider = ({ children }) => {
         return { success: true, accessToken: data.access_token };
       } else {
         // Refresh failed, clear tokens and logout
+        console.warn('Token refresh failed:', data.message);
         await logout();
         return { success: false, error: data.message || 'Token refresh failed' };
       }
@@ -354,6 +363,7 @@ export const AuthProvider = ({ children }) => {
     
     return refreshResult.success;
   };
+
 
   const value = {
     user,
