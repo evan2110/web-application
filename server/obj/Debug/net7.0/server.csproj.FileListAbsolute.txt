@@ -56,4 +56,6 @@ D:\KaopizTest\server\obj\Debug\net7.0\refint\server.dll
 D:\KaopizTest\server\obj\Debug\net7.0\server.pdb
 D:\KaopizTest\server\obj\Debug\net7.0\server.genruntimeconfig.cache
 D:\KaopizTest\server\obj\Debug\net7.0\ref\server.dll
+D:\KaopizTest\server\bin\Debug\net7.0\Google.Authenticator.dll
+D:\KaopizTest\server\bin\Debug\net7.0\QRCoder.dll
 D:\KaopizTest\server\obj\Debug\net7.0\server.csproj.CopyComplete

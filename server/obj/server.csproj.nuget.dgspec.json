@@ -45,6 +45,10 @@
               "target": "Package",
               "version": "[4.0.3, )"
             },
+            "GoogleAuthenticator": {
+              "target": "Package",
+              "version": "[3.2.0, )"
+            },
             "Microsoft.AspNetCore.Authentication.JwtBearer": {
               "target": "Package",
               "version": "[7.0.20, )"
@@ -52,6 +56,10 @@
             "Microsoft.AspNetCore.OpenApi": {
               "target": "Package",
               "version": "[7.0.5, )"
+            },
+            "QRCoder": {
+              "target": "Package",
+              "version": "[1.6.0, )"
             },
             "Supabase": {
               "target": "Package",
