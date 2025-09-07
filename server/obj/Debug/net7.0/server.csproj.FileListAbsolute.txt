@@ -51,9 +51,9 @@ D:\KaopizTest\server\obj\Debug\net7.0\staticwebassets.pack.json
 D:\KaopizTest\server\obj\Debug\net7.0\staticwebassets.build.json
 D:\KaopizTest\server\obj\Debug\net7.0\staticwebassets.development.json
 D:\KaopizTest\server\obj\Debug\net7.0\scopedcss\bundle\server.styles.css
-D:\KaopizTest\server\obj\Debug\net7.0\server.csproj.CopyComplete
 D:\KaopizTest\server\obj\Debug\net7.0\server.dll
 D:\KaopizTest\server\obj\Debug\net7.0\refint\server.dll
 D:\KaopizTest\server\obj\Debug\net7.0\server.pdb
 D:\KaopizTest\server\obj\Debug\net7.0\server.genruntimeconfig.cache
 D:\KaopizTest\server\obj\Debug\net7.0\ref\server.dll
+D:\KaopizTest\server\obj\Debug\net7.0\server.csproj.CopyComplete

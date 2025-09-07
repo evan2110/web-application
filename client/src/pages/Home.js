@@ -29,21 +29,24 @@ const Home = () => {
       {/* Tab Navigation */}
       <div className="tab-navigation mb-4">
         <button 
-          className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
+          className={`tab-btn tab-btn-profile ${activeTab === 'profile' ? 'active' : ''}`}
           onClick={() => setActiveTab('profile')}
         >
+          <span className="tab-icon">👤</span>
           User Profile
         </button>
         <button 
-          className={`tab-btn ${activeTab === 'todos' ? 'active' : ''}`}
+          className={`tab-btn tab-btn-todos ${activeTab === 'todos' ? 'active' : ''}`}
           onClick={() => setActiveTab('todos')}
         >
+          <span className="tab-icon">📝</span>
           Todo List
         </button>
         <button 
-          className={`tab-btn ${activeTab === 'counter' ? 'active' : ''}`}
+          className={`tab-btn tab-btn-counter ${activeTab === 'counter' ? 'active' : ''}`}
           onClick={() => setActiveTab('counter')}
         >
+          <span className="tab-icon">🔢</span>
           Counter
         </button>
       </div>

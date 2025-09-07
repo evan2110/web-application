@@ -102,9 +102,21 @@ const Login = () => {
                   name="rememberMe"
                   checked={formData.rememberMe}
                   onChange={handleChange}
-                  style={{ marginRight: '8px' }}
+                  style={{ 
+                    marginRight: '8px', 
+                    width: 'auto',
+                    minWidth: '16px',
+                    height: '16px',
+                    flexShrink: 0
+                  }}
                 />
-                <label htmlFor="rememberMe" style={{ margin: 0, fontSize: '14px', color: '#333' }}>
+                <label htmlFor="rememberMe" style={{ 
+                  margin: 0, 
+                  fontSize: '14px', 
+                  color: '#333',
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer'
+                }}>
                   Remember me
                 </label>
               </div>
@@ -131,11 +143,6 @@ const Login = () => {
             </p>
           </div>
 
-          <div className="text-center mt-3">
-            <small style={{ color: '#6c757d' }}>
-              Demo credentials: admin@example.com / password
-            </small>
-          </div>
         </div>
       </div>
       
