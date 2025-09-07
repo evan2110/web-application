@@ -1,4 +1,4 @@
-﻿namespace server.Models
+﻿namespace server.DTOs
 {
     public class Jwt
     {

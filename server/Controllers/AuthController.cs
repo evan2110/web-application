@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using server.DTOs;
 using server.Models;
 using server.Services;
+using server.Utilities;
 using System.Data;
 using System.Security.Claims;
 
@@ -15,12 +16,15 @@ namespace server.Controllers
         private readonly ISupabaseService _supabaseService;
         private readonly ITokenService _tokenService;
         private readonly IConfiguration _configuration;
+        private readonly IMailService _mail;
 
-        public AuthController(ISupabaseService supabaseService, ITokenService tokenService, IConfiguration configuration)
+        public AuthController(ISupabaseService supabaseService, ITokenService tokenService, IConfiguration configuration, IMailService mail)
         {
             _supabaseService = supabaseService;
             _tokenService = tokenService;
             _configuration = configuration;
+            _mail = mail;
+
         }
 
         [HttpPost("register")]
@@ -65,7 +69,7 @@ namespace server.Controllers
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDTO request)
-        {
+        {       
             if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
                 return BadRequest(new { message = "Email and password are required." });
 
@@ -79,6 +83,28 @@ namespace server.Controllers
             bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.Password);
             if (!isPasswordValid)
                 return Unauthorized(new { message = "Invalid email or password." });
+
+            if(user.UserType.ToLower() == "admin")
+            {
+                MailDataReqDTO mailDataReq = new MailDataReqDTO();
+                mailDataReq.ToEmail = request.Email;
+                mailDataReq.Subject = "Verify account";
+
+                string bodyHtml = "<html><body>";
+                bodyHtml += "<h1>Login authentication</h1>";
+                bodyHtml += "<p>Hello " + user.Email + ",</p>";
+                bodyHtml += "<p>Welcome back to login!</p>";
+                bodyHtml += "<p>Your verification code is: <strong>" + CommonUtils.GenerateVerificationCode() + "</strong></p>";
+                bodyHtml += "</body></html>";
+
+                mailDataReq.Body = bodyHtml;
+
+                await _mail.SendAsync(mailDataReq);
+                return Conflict(new
+                {
+                    message = "Please authenticate your login."
+                });
+            }
 
             var claims = new List<Claim>
             {

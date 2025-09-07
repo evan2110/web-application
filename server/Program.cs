@@ -1,8 +1,8 @@
 ﻿
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using server.DTOs;
 using server.Middleware;
-using server.Models;
 using server.Services;
 using System.Text;
 
@@ -61,6 +61,8 @@ namespace server
 
             builder.Services.AddScoped<server.Services.ISupabaseService, server.Services.SupabaseService>();
             builder.Services.AddScoped<ITokenService, TokenService>();
+            builder.Services.AddTransient<IMailService, MailService>();
+            builder.Services.Configure<MailSettingsDTO>(builder.Configuration.GetSection("MailSettingsDTO"));
 
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
