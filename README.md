@@ -96,13 +96,24 @@ Server (`server/server.csproj`):
 - CORS is enabled for `http://localhost:3000` in `Program.cs`.
 
 ### Running Locally
-1. Server
+1. Server (HTTPS)
    - .NET 7 SDK required.
-   - From `server/`: `dotnet restore` then `dotnet run`.
-   - Swagger UI available in development at `/swagger`.
-2. Client
+   - Trust dev HTTPS certificate (one‑time): `dotnet dev-certs https --trust`
+   - From `server/`:
+     - Restore deps: `dotnet restore`
+     - Run API (HTTPS): `dotnet run`
+   - The API listens on: `https://localhost:7297`
+   - Swagger UI (dev): `https://localhost:7297/swagger`
+   - Note: Project is configured to redirect HTTP → HTTPS.
+2. Client (React)
    - Node 16+ recommended.
-   - From `client/`: `npm install` then `npm start`.
+   - Create env file `client/.env` with API base URL:
+     - `REACT_APP_API_BASE_URL=https://localhost:7297`
+   - From `client/`:
+     - Install deps: `npm install`
+     - Start dev server: `npm start`
+   - The app runs on: `http://localhost:3000`
+   - The client reads the API base URL from `REACT_APP_API_BASE_URL`.
 
 ### Folder Structure
 - `client/`: React app source.
@@ -112,3 +123,16 @@ Server (`server/server.csproj`):
 ### Notes
 - Access tokens are short‑lived; refresh tokens are stored in DB and can be revoked.
 - On logout, tokens are blacklisted; middleware rejects blacklisted tokens.
+
+### Tests & Coverage
+- Run unit tests (server):
+  - From `test/`: `dotnet test`
+- View existing coverage report:
+  - Open `coverage/index.html` in a browser.
+- Regenerate coverage (Coverlet + optional HTML):
+  - From `test/` (save results to `../coverage/`):
+    - Collect coverage: `dotnet test /p:CollectCoverage=true /p:CoverletOutput=../coverage/coverage` 
+    - Output formats (choose as needed): add `/p:CoverletOutputFormat=opencover` or `lcov`.
+    - If you want an HTML report, generate from the coverage file using ReportGenerator:
+      - `reportgenerator -reports:../coverage/coverage.opencover.xml -targetdir:../coverage -reporttypes:Html`
+  - Then open `coverage/index.html`.
