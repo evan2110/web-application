@@ -118,42 +118,8 @@ namespace server.Controllers
                 });
             }
 
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Role, user.UserType ?? ""),
-            };
-
-            var accessToken = _tokenService.GenerateAccessToken(claims);
-            var refreshTokenValue = _tokenService.GenerateRefreshToken();
-
-            var refreshToken = new RefreshToken
-            {
-                Id = 0,
-                UserId = user.Id,
-                Token = refreshTokenValue,
-                ExpiresAt = request.RememberMe
-                    ? DateTime.Now.AddDays(30)
-                    : DateTime.Now.AddDays(_configuration.GetValue<int>("Jwt:RefreshTokenExpirationDays")),
-                CreatedAt = DateTime.Now,
-                RevokedAt = null
-            };
-
-            await _supabaseService.CreateAsync(refreshToken);
-            
-            return Ok(new
-            {
-                user = new
-                {
-                    user.Id,
-                    user.Email,
-                    user.UserType,
-                    user.CreatedAt,
-                },
-                access_token = accessToken,
-                refresh_token = refreshTokenValue
-            });
+            var tokenResponse = await GenerateTokenResponseAsync(user, request.RememberMe);
+            return Ok(tokenResponse);
         }
 
         [HttpPost("refresh")]
@@ -170,7 +136,6 @@ namespace server.Controllers
                 return Unauthorized(new { message = "Invalid or expired refresh token." });
             }
 
-            // Lấy user thông qua UserId từ refresh token
             var users = await _supabaseService.GetAllAsync<User>();
             var user = users.FirstOrDefault(e => e.Id == existingToken.UserId);
             if (user == null)
@@ -272,42 +237,8 @@ namespace server.Controllers
                 return BadRequest(new { message = "Verify code not matching." });
             }
 
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Role, user.UserType ?? ""),
-            };
-
-            var accessToken = _tokenService.GenerateAccessToken(claims);
-            var refreshTokenValue = _tokenService.GenerateRefreshToken();
-
-            var refreshToken = new RefreshToken
-            {
-                Id = 0,
-                UserId = user.Id,
-                Token = refreshTokenValue,
-                ExpiresAt = request.RememberMe
-                    ? DateTime.Now.AddDays(30)
-                    : DateTime.Now.AddDays(_configuration.GetValue<int>("Jwt:RefreshTokenExpirationDays")),
-                CreatedAt = DateTime.Now,
-                RevokedAt = null
-            };
-
-            await _supabaseService.CreateAsync(refreshToken);
-
-            return Ok(new
-            {
-                user = new
-                {
-                    user.Id,
-                    user.Email,
-                    user.UserType,
-                    user.CreatedAt,
-                },
-                access_token = accessToken,
-                refresh_token = refreshTokenValue
-            });
+            var tokenResponse = await GenerateTokenResponseAsync(user, request.RememberMe);
+            return Ok(tokenResponse);
         }
 
         [HttpGet("sendMail")]
@@ -336,6 +267,49 @@ namespace server.Controllers
             await _supabaseService.UpdateAsync(codeVerify);
 
             return Ok(new { message = "A new verification code has been sent to your email !" });
+        }
+
+        /// <summary>
+        /// Create token and refresh token for user
+        /// </summary>
+        private async Task<object> GenerateTokenResponseAsync(User user, bool rememberMe = false)
+        {
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Email, user.Email),
+                new Claim(ClaimTypes.Role, user.UserType ?? ""),
+            };
+
+            var accessToken = _tokenService.GenerateAccessToken(claims);
+            var refreshTokenValue = _tokenService.GenerateRefreshToken();
+
+            var refreshToken = new RefreshToken
+            {
+                Id = 0,
+                UserId = user.Id,
+                Token = refreshTokenValue,
+                ExpiresAt = rememberMe
+                    ? DateTime.Now.AddDays(30)
+                    : DateTime.Now.AddDays(_configuration.GetValue<int>("Jwt:RefreshTokenExpirationDays")),
+                CreatedAt = DateTime.Now,
+                RevokedAt = null
+            };
+
+            await _supabaseService.CreateAsync(refreshToken);
+
+            return new
+            {
+                user = new
+                {
+                    user.Id,
+                    user.Email,
+                    user.UserType,
+                    user.CreatedAt,
+                },
+                access_token = accessToken,
+                refresh_token = refreshTokenValue
+            };
         }
 
         private async Task SendVerificationEmailAsync(string toEmail, string code)
