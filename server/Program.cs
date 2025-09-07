@@ -63,6 +63,7 @@ namespace server
             builder.Services.AddScoped<ITokenService, TokenService>();
             builder.Services.AddScoped<IBlacklistService, BlacklistService>();
             builder.Services.AddTransient<IMailService, MailService>();
+            builder.Services.AddScoped<IAuthService, AuthService>();
             builder.Services.Configure<MailSettingsDTO>(builder.Configuration.GetSection("MailSettingsDTO"));
             
             // Add background service for cleanup

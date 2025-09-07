@@ -20,14 +20,16 @@ namespace server.Controllers
         private readonly IConfiguration _configuration;
         private readonly IMailService _mail;
         private readonly IBlacklistService _blacklistService;
+        private readonly IAuthService _authService;
 
-        public AuthController(ISupabaseService supabaseService, ITokenService tokenService, IConfiguration configuration, IMailService mail, IBlacklistService blacklistService)
+        public AuthController(ISupabaseService supabaseService, ITokenService tokenService, IConfiguration configuration, IMailService mail, IBlacklistService blacklistService, IAuthService authService)
         {
             _supabaseService = supabaseService;
             _tokenService = tokenService;
             _configuration = configuration;
             _mail = mail;
             _blacklistService = blacklistService;
+            _authService = authService;
         }
 
         [HttpPost("register")]
@@ -132,14 +134,14 @@ namespace server.Controllers
                     await _supabaseService.CreateAsync(userCodeVerify);
                 }
 
-                await SendVerificationEmailAsync(user.Email, code);
+                await _authService.SendVerificationEmailAsync(user.Email, code);
                 return Conflict(new
                 {
                     message = "Please authenticate your login."
                 });
             }
 
-            var tokenResponse = await GenerateTokenResponseAsync(user, request.RememberMe);
+            var tokenResponse = await _authService.GenerateTokenResponseAsync(user, request.RememberMe);
             return Ok(tokenResponse);
         }
 
@@ -270,7 +272,7 @@ namespace server.Controllers
                 return BadRequest(new { message = "Verify code not matching." });
             }
 
-            var tokenResponse = await GenerateTokenResponseAsync(user, request.RememberMe);
+            var tokenResponse = await _authService.GenerateTokenResponseAsync(user, request.RememberMe);
             return Ok(tokenResponse);
         }
 
@@ -296,7 +298,7 @@ namespace server.Controllers
             }
 
             string code = CommonUtils.GenerateVerificationCode();
-            await SendVerificationEmailAsync(user.Email, code);
+            await _authService.SendVerificationEmailAsync(user.Email, code);
 
             var codes = await _supabaseService.GetAllAsync<UserCodeVerify>();
             var codeVerify = codes.FirstOrDefault(e => e.UserId == user.Id);
@@ -306,67 +308,7 @@ namespace server.Controllers
             return Ok(new { message = "A new verification code has been sent to your email !" });
         }
 
-        /// <summary>
-        /// Create token and refresh token for user
-        /// </summary>
-        private async Task<object> GenerateTokenResponseAsync(User user, bool rememberMe = false)
-        {
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Role, user.UserType ?? ""),
-            };
-
-            var accessToken = _tokenService.GenerateAccessToken(claims);
-            var refreshTokenValue = _tokenService.GenerateRefreshToken();
-
-            var refreshToken = new RefreshToken
-            {
-                Id = 0,
-                UserId = user.Id,
-                Token = refreshTokenValue,
-                ExpiresAt = rememberMe
-                    ? DateTime.Now.AddDays(30)
-                    : DateTime.Now.AddDays(_configuration.GetValue<int>("Jwt:RefreshTokenExpirationDays")),
-                CreatedAt = DateTime.Now,
-                RevokedAt = null
-            };
-
-            await _supabaseService.CreateAsync(refreshToken);
-
-            return new
-            {
-                user = new
-                {
-                    user.Id,
-                    user.Email,
-                    user.UserType,
-                    user.CreatedAt,
-                },
-                access_token = accessToken,
-                refresh_token = refreshTokenValue
-            };
-        }
-
-
-        private async Task SendVerificationEmailAsync(string toEmail, string code)
-        {
-            MailDataReqDTO mailDataReq = new MailDataReqDTO();
-            mailDataReq.ToEmail = toEmail;
-            mailDataReq.Subject = "Verify account";
-
-            string bodyHtml = "<html><body>";
-            bodyHtml += "<h1>Login authentication</h1>";
-            bodyHtml += "<p>Hello " + toEmail + ",</p>";
-            bodyHtml += "<p>Welcome back to login!</p>";
-            bodyHtml += "<p>Your verification code is: <strong>" + code + "</strong></p>";
-            bodyHtml += "</body></html>";
-
-            mailDataReq.Body = bodyHtml;
-
-            await _mail.SendAsync(mailDataReq);
-        }
+        
 
     }
 }
