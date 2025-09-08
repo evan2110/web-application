@@ -59,6 +59,15 @@ const Home = () => {
           <span className="tab-icon">🔢</span>
           Counter
         </button>
+        {(user?.userType || '').toLowerCase() === 'admin' && (
+          <button 
+            className={`tab-btn tab-btn-admin ${activeTab === 'admin' ? 'active' : ''}`}
+            onClick={() => setActiveTab('admin')}
+          >
+            <span className="tab-icon">🛠️</span>
+            Admin Tools
+          </button>
+        )}
       </div>
 
       {/* Tab Content */}
@@ -66,6 +75,16 @@ const Home = () => {
         {activeTab === 'profile' && <UserProfile user={user} />}
         {activeTab === 'todos' && <TodoList />}
         {activeTab === 'counter' && <Counter />}
+        {activeTab === 'admin' && (user?.userType || '').toLowerCase() === 'admin' && (
+          <div className="card" style={{ padding: 16 }}>
+            <h3>Quick Admin Tools (no API)</h3>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn" onClick={() => alert('Opened system health (client-only)')}>System Health</button>
+              <button className="btn" onClick={() => alert('Cleared cache (client-only)')}>Clear Cache</button>
+              <button className="btn" onClick={() => alert('Simulated user sync (client-only)')}>Sync Users</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

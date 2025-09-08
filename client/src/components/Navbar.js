@@ -18,6 +18,16 @@ const Navbar = () => {
               <li>
                 <Link to="/home">Home</Link>
               </li>
+              {(user.userType || '').toLowerCase() === 'admin' && (
+                <>
+                  <li>
+                    <Link to="/admin">Admin</Link>
+                  </li>
+                  <li>
+                    <Link to="/admin/users">Users</Link>
+                  </li>
+                </>
+              )}
               <li>
                 <span>Welcome, {user.email}!</span>
               </li>

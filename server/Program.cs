@@ -91,6 +91,8 @@ namespace server
 
             app.UseHttpsRedirection();
 
+            // Ensure JWT authentication runs before authorization so User is populated
+            app.UseAuthentication();
             app.UseAuthorization();
 
 
