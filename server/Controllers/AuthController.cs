@@ -35,51 +35,48 @@ namespace server.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterDTO request)
         {
-            if (string.IsNullOrEmpty(request.Email.Trim()) || string.IsNullOrEmpty(request.Password.Trim()) || string.IsNullOrEmpty(request.UserType.Trim()))
-                return BadRequest(new { message = "Invalid request." });
-
-            if (request.Password.Trim().Length < 6)
+            if (!ModelState.IsValid)
             {
-                return BadRequest(new { message = "Password must greater than 6." });
+                return BadRequest(ModelState);
             }
-
-            if (!CommonUtils.IsValidEmail(request.Email.Trim()))
+            try
             {
-                return BadRequest(new { message = "Email is wrong format." });
-            }
+                var users = await _supabaseService.GetAllAsync<User>();
+                if (users.Any(e => e.Email == request.Email))
+                    return StatusCode(500, new { message = "Failed to create user due to a server error." });
 
-            var users = await _supabaseService.GetAllAsync<User>();
-            if (users.Any(e => e.Email == request.Email))
-                return Conflict(new { message = "Email is already in use." });
+                string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
-            string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+                var newUser = new User
+                {
+                    Id = 0,
+                    Email = request.Email,
+                    Password = passwordHash,
+                    UserType = request.UserType,
+                    CreatedAt = DateTime.Now,
+                };
 
-            var newUser = new User
-            {
-                Id = 0,
-                Email = request.Email,
-                Password = passwordHash,
-                UserType = request.UserType,
-                CreatedAt = DateTime.Now,
-            };
+                var createdUser = await _supabaseService.CreateAsync(newUser);
 
-            var createdUser = await _supabaseService.CreateAsync(newUser);
+                if (createdUser == null)
+                {
+                    return StatusCode(500, new { message = "Failed to create user due to a server error." });
+                }
 
-            if (createdUser != null)
-            {
                 var userDto = new UserDto
                 {
                     Id = createdUser.Id,
                     Email = createdUser.Email,
-                    Password = createdUser.Password,
                     UserType = createdUser.UserType,
                     CreatedAt = createdUser.CreatedAt
                 };
 
                 return Ok(userDto);
             }
-
-            return BadRequest("Failed to create user");
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An internal server error occurred." });
+            }
         }
 
         [HttpPost("login")]
