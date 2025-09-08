@@ -28,6 +28,10 @@ namespace server.Utilities
             public const string VerifyCodeSent = "VERIFY_CODE_SENT";
             public const string LoggedOutSucessfully = "LOGGED_OUT_SUCCESSFULLY";
             public const string EmailNotVerify = "EMAIL_NOT_VERIFY";
+            public const string PleaseVerifyEmailBeforeLogin = "PLEASE_VERIFY_EMAIL_BEFORE_LOGIN";
+            public const string InvalidVerificationLink = "INVALID_VERIFICATION_LINK";
+            public const string InvalidOrExpiredVerificationLink = "INVALID_OR_EXPIRED_VERIFICATION_LINK";
+            public const string EmailVerifiedSuccessfully = "EMAIL_VERIFIED_SUCCESSFULLY";
         }
         public static string GenerateVerificationCode()
         {

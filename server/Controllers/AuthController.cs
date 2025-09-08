@@ -82,7 +82,7 @@ namespace server.Controllers
                     return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.InvalidEmailOrPassword) });
 
                 if (user.ConfirmedAt == null)
-                    return Unauthorized(new { message = "Please verify your email before logging in." });
+                    return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.PleaseVerifyEmailBeforeLogin) });
 
                 if (await _authService.EnsureAdminVerificationAsync(user))
                     return Conflict(new { message = _messages.Get(CommonUtils.MessageCodes.PleaseAuthenticateLogin) });
@@ -186,12 +186,12 @@ namespace server.Controllers
         public async Task<IActionResult> VerifyEmail([FromQuery] string token)
         {
             if (string.IsNullOrWhiteSpace(token))
-                return BadRequest(new { message = "Invalid verification link." });
+                return BadRequest(new { message = _messages.Get(CommonUtils.MessageCodes.InvalidVerificationLink) });
 
             try
             {
                 if (!_tokenService.TryValidateEmailVerificationToken(token, out var email))
-                    return BadRequest(new { message = "Invalid or expired verification link." });
+                    return BadRequest(new { message = _messages.Get(CommonUtils.MessageCodes.InvalidOrExpiredVerificationLink) });
 
                 var user = await _authService.GetUserByEmailAsync(email);
                 if (user == null)
@@ -201,14 +201,14 @@ namespace server.Controllers
                 if (string.IsNullOrWhiteSpace(user.ConfirmedToken) || !string.Equals(user.ConfirmedToken, token, StringComparison.Ordinal))
                 {
                     _logger.LogWarning("Email verification token mismatch for {Email}", email);
-                    return BadRequest(new { message = "Invalid verification link." });
+                    return BadRequest(new { message = _messages.Get(CommonUtils.MessageCodes.InvalidVerificationLink) });
                 }
 
                 user.ConfirmedAt = DateTime.Now;
                 user.ConfirmedToken = null; // Invalidate token after successful verification
                 await _authService.UpdateUserAsync(user);
 
-                return Ok(new { success = true, message = "Email verified successfully." });
+                return Ok(new { success = true, message = _messages.Get(CommonUtils.MessageCodes.EmailVerifiedSuccessfully) });
             }
             catch (Exception ex)
             {
