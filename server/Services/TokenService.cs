@@ -105,5 +105,76 @@ namespace server.Services
             if (isBlacklisted) _logger.LogWarning("Token is blacklisted");
             return !isBlacklisted;
         }
+
+        public string GeneratePasswordResetToken(string email)
+        {
+            _logger.LogDebug("Generating password reset token for {Email}", email);
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:SecretKey"]!));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.Email, email),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                new Claim("typ", "pwdreset")
+            };
+
+            var token = new JwtSecurityToken(
+                issuer: _configuration["Jwt:Issuer"],
+                audience: _configuration["Jwt:Audience"],
+                claims: claims,
+                expires: DateTime.Now.AddMinutes(15),
+                signingCredentials: creds
+            );
+
+            var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+            _logger.LogDebug("Password reset token generated");
+            return tokenString;
+        }
+
+        public bool TryValidatePasswordResetToken(string token, out string email)
+        {
+            email = string.Empty;
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var secretKey = _configuration["Jwt:SecretKey"];
+            var issuer = _configuration["Jwt:Issuer"];
+            var audience = _configuration["Jwt:Audience"];
+
+            var key = Encoding.UTF8.GetBytes(secretKey);
+
+            var validationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = issuer,
+
+                ValidateAudience = true,
+                ValidAudience = audience,
+
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.Zero,
+
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(key)
+            };
+
+            try
+            {
+                var principal = tokenHandler.ValidateToken(token, validationParameters, out var validatedToken);
+                if (validatedToken is not JwtSecurityToken jwt)
+                    return false;
+
+                var typeClaim = jwt.Claims.FirstOrDefault(c => c.Type == "typ")?.Value;
+                if (typeClaim != "pwdreset")
+                    return false;
+
+                email = jwt.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value ?? string.Empty;
+                return !string.IsNullOrWhiteSpace(email);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Password reset token failed validation");
+                return false;
+            }
+        }
     }
 }

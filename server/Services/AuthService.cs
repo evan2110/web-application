@@ -297,6 +297,41 @@ namespace server.Services
 			_logger.LogInformation("Sent verification email to {Email}", user.Email);
 		}
 
+		public async Task SendPasswordResetEmailAsync(string toEmail, string resetLink)
+		{
+			_logger.LogInformation("Sending password reset email to {Email}", toEmail);
+			MailDataReqDTO mailDataReq = new MailDataReqDTO();
+			mailDataReq.ToEmail = toEmail;
+			mailDataReq.Subject = "Reset your password";
+
+			string bodyHtml = "<html><body>";
+			bodyHtml += "<h1>Password reset</h1>";
+			bodyHtml += "<p>Hello " + toEmail + ",</p>";
+			bodyHtml += "<p>We received a request to reset your password.</p>";
+			bodyHtml += $"<p>Click the link below to set a new password (valid for 15 minutes):</p>";
+			bodyHtml += $"<p><a href=\"{resetLink}\">Reset your password</a></p>";
+			bodyHtml += "</body></html>";
+
+			mailDataReq.Body = bodyHtml;
+
+			await _mailService.SendAsync(mailDataReq);
+		}
+
+		public async Task ResetPasswordAsync(string email, string newPassword)
+		{
+			_logger.LogInformation("Resetting password for {Email}", email);
+			var user = await _supabaseService.GetClient()
+				.From<User>()
+				.Where(u => u.Email == email)
+				.Single();
+			if (user == null)
+				throw new UnauthorizedAccessException("User not found.");
+
+			user.Password = BCrypt.Net.BCrypt.HashPassword(newPassword);
+			await _supabaseService.UpdateAsync(user);
+			_logger.LogInformation("Password reset successfully for {Email}", email);
+		}
+
 		public async Task LogoutAsync(string refreshToken, string? accessToken)
 		{
 			_logger.LogInformation("Logout requested");

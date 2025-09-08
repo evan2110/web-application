@@ -138,7 +138,7 @@ namespace server.Controllers
             {
                 _logger.LogInformation("Logout requested");
                 await _authService.LogoutAsync(request.RefreshToken!, request.AccessToken);
-                return Ok(new { message = "Logged out successfully." });
+                return Ok(new { message = _messages.Get(CommonUtils.MessageCodes.LoggedOutSucessfully) });
             }
             catch (KeyNotFoundException)
             {
@@ -216,7 +216,63 @@ namespace server.Controllers
             }
         }
 
-        
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDTO request)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+            if (string.IsNullOrWhiteSpace(request.Email))
+            {
+                return BadRequest(new { message = _messages.Get(CommonUtils.MessageCodes.EmailRequired) });
+            }
+            if (!CommonUtils.IsValidEmail(request.Email))
+            {
+                return BadRequest(new { message = _messages.Get(CommonUtils.MessageCodes.EmailWrongFormat) });
+            }
+            try
+            {
+                _logger.LogInformation("Password reset requested for {Email}", request.Email);
+                var resetToken = _tokenService.GeneratePasswordResetToken(request.Email);
+                var frontendBaseUrl = Request.Headers["Origin"].FirstOrDefault() ?? "http://localhost:3000";
+                var resetLink = $"{frontendBaseUrl}/reset-password?token={WebUtility.UrlEncode(resetToken)}";
+                await _authService.SendPasswordResetEmailAsync(request.Email, resetLink);
+                return Ok(new { success = true });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during forgot-password for {Email}", request.Email);
+                return StatusCode(500, new { message = _messages.Get(CommonUtils.MessageCodes.InternalServerError) });
+            }
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDTO request)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+            try
+            {
+                if (!_tokenService.TryValidatePasswordResetToken(request.Token, out var email))
+                {
+                    return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.InvalidOrExpiredRefreshToken) });
+                }
+                await _authService.ResetPasswordAsync(email, request.NewPassword);
+                return Ok(new { success = true });
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.UserNotFound) });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during password reset");
+                return StatusCode(500, new { message = _messages.Get(CommonUtils.MessageCodes.InternalServerError) });
+            }
+        }
 
     }
 }

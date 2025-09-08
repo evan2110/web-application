@@ -26,6 +26,7 @@ namespace server.Utilities
             public const string EmailRequired = "EMAIL_REQUIRED";
             public const string EmailWrongFormat = "EMAIL_WRONG_FORMAT";
             public const string VerifyCodeSent = "VERIFY_CODE_SENT";
+            public const string LoggedOutSucessfully = "LOGGED_OUT_SUCCESSFULLY";
         }
         public static string GenerateVerificationCode()
         {
