@@ -81,7 +81,7 @@ namespace server.Controllers
                 if (user == null || !_authService.VerifyPassword(request.Password, user.Password))
                     return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.InvalidEmailOrPassword) });
 
-                if (user.VerifyAt == null)
+                if (user.ConfirmedAt == null)
                     return Unauthorized(new { message = "Please verify your email before logging in." });
 
                 if (await _authService.EnsureAdminVerificationAsync(user))
@@ -197,15 +197,18 @@ namespace server.Controllers
                 if (user == null)
                     return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.UserNotFound) });
 
-                user.VerifyAt = DateTime.Now;
+                // Ensure the provided token matches the one stored for this user
+                if (string.IsNullOrWhiteSpace(user.ConfirmedToken) || !string.Equals(user.ConfirmedToken, token, StringComparison.Ordinal))
+                {
+                    _logger.LogWarning("Email verification token mismatch for {Email}", email);
+                    return BadRequest(new { message = "Invalid verification link." });
+                }
+
+                user.ConfirmedAt = DateTime.Now;
+                user.ConfirmedToken = null; // Invalidate token after successful verification
                 await _authService.UpdateUserAsync(user);
 
-                var configuredFrontend = _configuration["Frontend:BaseUrl"];
-                var frontendBaseUrl = !string.IsNullOrWhiteSpace(configuredFrontend)
-                    ? configuredFrontend
-                    : (Request.Headers["Origin"].FirstOrDefault() ?? "http://localhost:3000");
-                var redirectUrl = $"{frontendBaseUrl}/login?verified=true";
-                return Redirect(redirectUrl);
+                return Ok(new { success = true, message = "Email verified successfully." });
             }
             catch (Exception ex)
             {
@@ -266,11 +269,15 @@ namespace server.Controllers
                 {
                     return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.UserNotFound) });
                 }
-                if (user.VerifyAt == null)
+                if (user.ConfirmedAt == null)
                 {
-                    return Unauthorized(new { message = "Please verify your email before requesting a password reset." });
+                    return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.EmailNotVerify) });
                 }
                 var resetToken = _tokenService.GeneratePasswordResetToken(request.Email);
+
+                user.ResetToken = resetToken;
+                await _supabaseService.UpdateAsync(user);
+
                 var frontendBaseUrl = Request.Headers["Origin"].FirstOrDefault() ?? "http://localhost:3000";
                 var resetLink = $"{frontendBaseUrl}/reset-password?token={WebUtility.UrlEncode(resetToken)}";
                 await _authService.SendPasswordResetEmailAsync(request.Email, resetLink);
@@ -296,7 +303,19 @@ namespace server.Controllers
                 {
                     return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.InvalidOrExpiredRefreshToken) });
                 }
+                var user = await _authService.GetUserByEmailAsync(email);
+                if (user == null)
+                {
+                    return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.UserNotFound) });
+                }
+                if (string.IsNullOrWhiteSpace(user.ResetToken) || !string.Equals(user.ResetToken, request.Token, StringComparison.Ordinal))
+                {
+                    _logger.LogWarning("Password reset token mismatch for {Email}", email);
+                    return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.InvalidOrExpiredRefreshToken) });
+                }
                 await _authService.ResetPasswordAsync(email, request.NewPassword);
+                user.ResetToken = null;
+                await _authService.UpdateUserAsync(user);
                 return Ok(new { success = true });
             }
             catch (UnauthorizedAccessException)

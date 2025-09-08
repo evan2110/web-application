@@ -112,7 +112,7 @@ namespace test.controllerTest
 			result1.Should().BeOfType<UnauthorizedObjectResult>();
 
 			auth.Reset();
-			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 2, Email = "u@x.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), VerifyAt = DateTime.Now });
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 2, Email = "u@x.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), ConfirmedAt = DateTime.Now });
 			auth.Setup(a => a.VerifyPassword("wrong", It.IsAny<string>())).Returns(false);
 			var result2 = await controller.Login(new LoginDTO { Email = "u@x.com", Password = "wrong" });
 			result2.Should().BeOfType<UnauthorizedObjectResult>();
@@ -122,7 +122,7 @@ namespace test.controllerTest
 		public async Task Login_Unauthorized_WhenEmailNotVerified()
 		{
 			var (controller, _, _, _, _, auth, _, _) = Build();
-			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 2, Email = "u@x.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), VerifyAt = null });
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 2, Email = "u@x.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), ConfirmedAt = null });
 			auth.Setup(a => a.VerifyPassword("123456", It.IsAny<string>())).Returns(true);
 			var result = await controller.Login(new LoginDTO { Email = "u@x.com", Password = "123456" });
 			result.Should().BeOfType<UnauthorizedObjectResult>();
@@ -132,7 +132,7 @@ namespace test.controllerTest
 		public async Task Login_Conflict_WhenAdminNeedsVerification()
 		{
 			var (controller, _, _, _, _, auth, _, _) = Build();
-			var user = new User { Id = 3, Email = "admin@x.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), VerifyAt = DateTime.Now, UserType = CommonUtils.UserRoles.Admin };
+			var user = new User { Id = 3, Email = "admin@x.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), ConfirmedAt = DateTime.Now, UserType = CommonUtils.UserRoles.Admin };
 			auth.Setup(a => a.GetUserByEmailAsync(user.Email)).ReturnsAsync(user);
 			auth.Setup(a => a.VerifyPassword("123456", It.IsAny<string>())).Returns(true);
 			auth.Setup(a => a.EnsureAdminVerificationAsync(user)).ReturnsAsync(true);
@@ -144,7 +144,7 @@ namespace test.controllerTest
 		public async Task Login_Ok_OnSuccess()
 		{
 			var (controller, _, _, _, _, auth, _, _) = Build();
-			var user = new User { Id = 4, Email = "user@x.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), VerifyAt = DateTime.Now, UserType = "user" };
+			var user = new User { Id = 4, Email = "user@x.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), ConfirmedAt = DateTime.Now, UserType = "user" };
 			auth.Setup(a => a.GetUserByEmailAsync(user.Email)).ReturnsAsync(user);
 			auth.Setup(a => a.VerifyPassword("123456", It.IsAny<string>())).Returns(true);
 			auth.Setup(a => a.EnsureAdminVerificationAsync(user)).ReturnsAsync(false);
@@ -395,7 +395,7 @@ namespace test.controllerTest
 			r1.Should().BeOfType<UnauthorizedObjectResult>();
 
 			auth.Reset();
-			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 1, Email = "u@x.com", VerifyAt = null });
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 1, Email = "u@x.com", ConfirmedAt = null });
 			var r2 = await controller.ForgotPassword(new ForgotPasswordDTO { Email = "u@x.com" });
 			r2.Should().BeOfType<UnauthorizedObjectResult>();
 		}
@@ -404,7 +404,7 @@ namespace test.controllerTest
 		public async Task ForgotPassword_Ok_OnSuccess()
 		{
 			var (controller, _, token, _, _, auth, _, _) = Build();
-			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 2, Email = "u@x.com", VerifyAt = DateTime.Now });
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 2, Email = "u@x.com", ConfirmedAt = DateTime.Now });
 			token.Setup(t => t.GeneratePasswordResetToken("u@x.com")).Returns("reset-token");
 			controller.ControllerContext.HttpContext!.Request.Headers["Origin"] = "http://origin.local";
 			auth.Setup(a => a.SendPasswordResetEmailAsync("u@x.com", It.Is<string>(s => s.Contains("reset-password")))).Returns(Task.CompletedTask);

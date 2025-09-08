@@ -55,13 +55,16 @@ namespace server.Services
 		{
 			_logger.LogInformation("Creating user for {Email}", email);
 			string passwordHash = BCrypt.Net.BCrypt.HashPassword(password);
-			var newUser = new User
+            var verifyToken = _tokenService.GenerateEmailVerificationToken(email);
+
+            var newUser = new User
 			{
 				Id = 0,
 				Email = email,
 				Password = passwordHash,
 				UserType = userType,
 				CreatedAt = DateTime.Now,
+				ConfirmedToken = verifyToken
 			};
 
 			var createdUser = await _supabaseService.CreateAsync(newUser);
@@ -73,9 +76,8 @@ namespace server.Services
 			_logger.LogInformation("User created successfully with id {UserId}", createdUser.Id);
 
 			// Send email verification link for all users upon registration
-			var verifyToken = _tokenService.GenerateEmailVerificationToken(createdUser.Email);
-			var backendBaseUrl = _configuration["Backend:BaseUrl"] ?? _configuration["ASPNETCORE_URLS"] ?? "https://localhost:7297";
-			var verifyLink = $"{backendBaseUrl}/api/Auth/verify-email?token={Uri.EscapeDataString(verifyToken)}";
+			var frontendBaseUrl = _configuration["Frontend:BaseUrl"] ?? "http://localhost:3000";
+			var verifyLink = $"{frontendBaseUrl}/verify-email?token={Uri.EscapeDataString(verifyToken)}";
 			await SendEmailVerificationLinkAsync(createdUser.Email, verifyLink);
 			return createdUser;
 		}

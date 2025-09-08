@@ -29,7 +29,7 @@ The schema contains four main tables, matching the diagram provided:
   - `email` (varchar)
   - `password` (varchar, BCrypt‑hashed)
   - `user_type` (varchar)
-  - `verify_at` (timestamptz, nullable)
+  - `confirmed_at` (timestamptz, nullable)
 
 - **refresh_token**
   - `id` (int8, PK)

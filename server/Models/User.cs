@@ -26,7 +26,13 @@ namespace server.Models
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
-		[Column("verify_at")]
-		public DateTime? VerifyAt { get; set; }
+		[Column("confirmed_at")]
+		public DateTime? ConfirmedAt { get; set; }
+
+        [Column("confirmed_token")]
+        public string? ConfirmedToken { get; set; }
+
+        [Column("reset_token")]
+        public string? ResetToken { get; set; }
     }
 }
