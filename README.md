@@ -4,7 +4,10 @@ A full‑stack demo implementing authentication with JWT access/refresh tokens, 
 
 ### Features
 - **User registration and login**: Email + password with hashed storage (BCrypt).
-- **Email verification flow**: Send verification code, verify user before enabling access.
+- **Email verification (link-based)**: Verification link sent on registration; account activated on success.
+- **Admin code verification (2-step on login)**: Admin users must enter a verification code emailed at login.
+- **Resend verification code**: Endpoint to resend admin verification code.
+- **Forgot/Reset password**: Email reset link with token, secure password update.
 - **JWT authentication**: Short‑lived access token, long‑lived refresh token.
 - **Token refresh**: Issue new access token using a valid refresh token.
 - **Token blacklist**: Invalidate tokens on logout or security events; periodic cleanup.
@@ -26,6 +29,7 @@ The schema contains four main tables, matching the diagram provided:
   - `email` (varchar)
   - `password` (varchar, BCrypt‑hashed)
   - `user_type` (varchar)
+  - `verify_at` (timestamptz, nullable)
 
 - **refresh_token**
   - `id` (int8, PK)
@@ -40,24 +44,28 @@ The schema contains four main tables, matching the diagram provided:
   - `blacklisted_at` (timestamptz)
   - `token` (varchar)
   - `expires_at` (timestamptz)
-  - `user_id` (int8, FK → user.id)
+  - `user_id` (int8, FK → user.id, nullable)
   - `reason` (varchar)
 
 - **user_code_verify**
   - `id` (int8, PK)
   - `user_id` (int8, FK → user.id)
   - `verify_code` (varchar)
-  - `status` (varchar)
+  - `status` (int)
 
 Relations: `user` has many `refresh_token`, many `blacklisted_token`, and many `user_code_verify` records.
 
 ### API Overview (Server)
 - `AuthController`
   - `POST /api/auth/register`: Register a new user and send a verification code.
-  - `POST /api/auth/verify`: Verify code to activate the account.
+  - `GET /api/auth/verify-email?token=...`: Verify email via link; activates the account.
+  - `POST /api/auth/verify`: Verify admin code during login and issue tokens.
   - `POST /api/auth/login`: Authenticate; returns access and refresh tokens.
   - `POST /api/auth/refresh`: Exchange refresh token for a new access token.
   - `POST /api/auth/logout`: Blacklist active tokens and revoke refresh token.
+  - `GET /api/auth/sendMail?email=...`: Resend admin verification code to an email.
+  - `POST /api/auth/forgot-password`: Send password reset link to email.
+  - `POST /api/auth/reset-password`: Reset password using a valid reset token.
 
 Middleware and services:
 - `TokenValidationMiddleware`: Handles token validation and blacklist checks.
@@ -94,6 +102,9 @@ Server (`server/server.csproj`):
 ### Configuration
 - Configure JWT and mail settings in `server/appsettings.json` (and `appsettings.Development.json`).
 - CORS is enabled for `http://localhost:3000` in `Program.cs`.
+- Email verification and password reset use base URLs from config:
+  - `Frontend:BaseUrl` (redirect target and client links)
+  - `Backend:BaseUrl` (build verification links sent in emails)
 
 ### Running Locally
 1. Server (HTTPS)
