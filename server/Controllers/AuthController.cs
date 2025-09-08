@@ -41,22 +41,10 @@ namespace server.Controllers
             }
             try
             {
-                var users = await _supabaseService.GetAllAsync<User>();
-                if (users.Any(e => e.Email == request.Email))
-                    return StatusCode(500, new { message = "Failed to create user due to a server error." });
+                if (await _authService.IsEmailTakenAsync(request.Email))
+                    return Conflict(new { message = "Email already exists." });
 
-                string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
-
-                var newUser = new User
-                {
-                    Id = 0,
-                    Email = request.Email,
-                    Password = passwordHash,
-                    UserType = request.UserType,
-                    CreatedAt = DateTime.Now,
-                };
-
-                var createdUser = await _supabaseService.CreateAsync(newUser);
+                var createdUser = await _authService.CreateUserAsync(request.Email, request.Password, request.UserType);
 
                 if (createdUser == null)
                 {
@@ -82,227 +70,127 @@ namespace server.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDTO request)
         {       
-            if (string.IsNullOrEmpty(request.Email.Trim()) || string.IsNullOrEmpty(request.Password.Trim()))
-                return BadRequest(new { message = "Email and password are required." });
-
-            if (request.Password.Trim().Length < 6)
+            if (!ModelState.IsValid)
             {
-                return BadRequest(new { message = "Password must greater than 6." });
+                return BadRequest(ModelState);
             }
-
-            if (!CommonUtils.IsValidEmail(request.Email.Trim()))
+            try
             {
-                return BadRequest(new { message = "Email is wrong format." });
+                var user = await _authService.GetUserByEmailAsync(request.Email);
+
+                if (user == null || !_authService.VerifyPassword(request.Password, user.Password))
+                    return Unauthorized(new { message = "Invalid email or password." });
+
+                if (await _authService.EnsureAdminVerificationAsync(user))
+                    return Conflict(new { message = "Please authenticate your login." });
+
+                var tokenResponse = await _authService.GenerateTokenResponseAsync(user, request.RememberMe);
+                return Ok(tokenResponse);
             }
-
-            var users = await _supabaseService.GetAllAsync<User>();
-
-            if (!users.Any(e => e.Email == request.Email))
-                return Unauthorized(new { message = "User not exist." });
-
-            var user = users.FirstOrDefault(e => e.Email == request.Email);
-
-            bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.Password);
-            if (!isPasswordValid)
-                return Unauthorized(new { message = "Invalid email or password." });
-
-            if(user.UserType.ToLower() == "admin")
+            catch (Exception ex)
             {
-                MailDataReqDTO mailDataReq = new MailDataReqDTO();
-                var code = CommonUtils.GenerateVerificationCode();
-
-                var codes = await _supabaseService.GetAllAsync<UserCodeVerify>();
-                var codeVerify = codes.FirstOrDefault(e => e.UserId == user.Id);
-                if(codeVerify != null)
-                {
-                    codeVerify.VerifyCode = code;
-                    await _supabaseService.UpdateAsync(codeVerify);
-                }
-                else
-                {
-                    var userCodeVerify = new UserCodeVerify
-                    {
-                        Id = 0,
-                        UserId = user.Id,
-                        VerifyCode = code,
-                        Status = 1,
-                    };
-
-                    await _supabaseService.CreateAsync(userCodeVerify);
-                }
-
-                await _authService.SendVerificationEmailAsync(user.Email, code);
-                return Conflict(new
-                {
-                    message = "Please authenticate your login."
-                });
+                return StatusCode(500, new { message = "An internal server error occurred." });
             }
-
-            var tokenResponse = await _authService.GenerateTokenResponseAsync(user, request.RememberMe);
-            return Ok(tokenResponse);
         }
 
         [HttpPost("refresh")]
         public async Task<IActionResult> Refresh([FromBody] RefreshDTO request)
         {
-            if (string.IsNullOrEmpty(request.RefreshToken.Trim()))
-                return BadRequest(new { message = "Refresh token is required." });
-
-            var refreshTokens = await _supabaseService.GetAllAsync<RefreshToken>();
-            var existingToken = refreshTokens.FirstOrDefault(e => e.Token == request.RefreshToken);
-
-            if (existingToken == null || existingToken.RevokedAt != null || existingToken.ExpiresAt <= DateTime.Now)
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+            try
+            {
+                var result = await _authService.RefreshUsingRefreshTokenAsync(request.RefreshToken);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException)
             {
                 return Unauthorized(new { message = "Invalid or expired refresh token." });
             }
-
-            var users = await _supabaseService.GetAllAsync<User>();
-            var user = users.FirstOrDefault(e => e.Id == existingToken.UserId);
-            if (user == null)
+            catch (Exception)
             {
-                return Unauthorized(new { message = "User not found." });
+                return StatusCode(500, new { message = "An internal server error occurred." });
             }
-
-            // Create claims for access token new
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Role, user.UserType ?? "")
-            };
-
-            var newAccessToken = _tokenService.GenerateAccessToken(claims);
-            var newRefreshTokenValue = _tokenService.GenerateRefreshToken();
-
-            // Revoke refresh token old
-            existingToken.RevokedAt = DateTime.Now;
-            await _supabaseService.UpdateAsync(existingToken);
-
-            // Create refresh token new
-            var newRefreshToken = new RefreshToken
-            {
-                Id = 0,
-                UserId = user.Id,
-                Token = newRefreshTokenValue,
-                CreatedAt = DateTime.Now,
-                ExpiresAt = DateTime.Now.AddDays(_configuration.GetValue<int>("Jwt:RefreshTokenExpirationDays"))
-            };
-
-            await _supabaseService.CreateAsync(newRefreshToken);
-
-            return Ok(new
-            {
-                access_token = newAccessToken,
-                refresh_token = newRefreshTokenValue
-            });
         }
 
         [HttpPost("logout")]
         public async Task<IActionResult> Logout([FromBody] LogoutDTO request)
         {
-            if (string.IsNullOrWhiteSpace(request.RefreshToken.Trim()) || string.IsNullOrWhiteSpace(request.AccessToken.Trim()))
+            if (!ModelState.IsValid)
             {
-                return BadRequest(new { message = "Invalid request." });
+                return BadRequest(ModelState);
             }
-
-            var refreshTokens = await _supabaseService.GetAllAsync<RefreshToken>();
-            var storedToken = refreshTokens.FirstOrDefault(e => e.Token == request.RefreshToken);
-
-            if (storedToken == null)
+            try
+            {
+                await _authService.LogoutAsync(request.RefreshToken!, request.AccessToken);
+                return Ok(new { message = "Logged out successfully." });
+            }
+            catch (KeyNotFoundException)
             {
                 return NotFound(new { message = "Refresh token not found." });
             }
-
-            // If was revoked 
-            if (storedToken.RevokedAt != null)
+            catch (InvalidOperationException)
             {
                 return BadRequest(new { message = "Refresh token already revoked." });
             }
-
-            // Add access token to blacklist if provided
-            if (!string.IsNullOrWhiteSpace(request.AccessToken))
+            catch (Exception)
             {
-                await _blacklistService.AddTokenToBlacklistAsync(request.AccessToken, storedToken.UserId, "User logout");
+                return StatusCode(500, new { message = "An internal server error occurred." });
             }
-
-            // Revoke refresh token
-            storedToken.RevokedAt = DateTime.Now;
-            await _supabaseService.UpdateAsync(storedToken);
-            
-            return Ok(new { message = "Logged out successfully." });
         }
 
         [HttpPost("verify")]
         public async Task<IActionResult> VerifyUser([FromBody] VerifyUserDTO request)
         {
-            if (string.IsNullOrWhiteSpace(request.UserCodeVerify.Trim()))
+            if (!ModelState.IsValid)
             {
-                return BadRequest(new { message = "Verify code is required." });
+                return BadRequest(ModelState);
             }
-            if (string.IsNullOrWhiteSpace(request.Email.Trim()))
+            try
             {
-
-                return BadRequest(new { message = "Email is required." });
+                var result = await _authService.VerifyUserAndIssueTokensAsync(request.Email, request.UserCodeVerify, request.RememberMe);
+                return Ok(result);
             }
-            if (!CommonUtils.IsValidEmail(request.Email.Trim()))
-            {
-                return BadRequest(new { message = "Email is wrong format." });
-            }
-            if (request.UserCodeVerify.Trim().Length < 6)
-            {
-                return BadRequest(new { message = "Verify code must greater than 6." });
-            }
-
-            var users = await _supabaseService.GetAllAsync<User>();
-            var user = users.FirstOrDefault(e => e.Email == request.Email);
-
-            if (user == null)
+            catch (UnauthorizedAccessException)
             {
                 return Unauthorized(new { message = "User not found." });
             }
-
-            var codes = await _supabaseService.GetAllAsync<UserCodeVerify>();
-            var codeVerify = codes.FirstOrDefault(e => e.UserId == user.Id);
-
-            if (codeVerify.VerifyCode != request.UserCodeVerify.Trim())
+            catch (ArgumentException)
             {
                 return BadRequest(new { message = "Verify code not matching." });
             }
-
-            var tokenResponse = await _authService.GenerateTokenResponseAsync(user, request.RememberMe);
-            return Ok(tokenResponse);
+            catch (Exception)
+            {
+                return StatusCode(500, new { message = "An internal server error occurred." });
+            }
         }
 
         [HttpGet("sendMail")]
         public async Task<IActionResult> SendMail(string email)
         {
-
             if (string.IsNullOrWhiteSpace(email))
             {
-
                 return BadRequest(new { message = "Email is required." });
             }
             if (!CommonUtils.IsValidEmail(email))
             {
                 return BadRequest(new { message = "Email is wrong format." });
             }
-            var users = await _supabaseService.GetAllAsync<User>();
-            var user = users.FirstOrDefault(e => e.Email == email);
-
-            if (user == null)
+            try
+            {
+                await _authService.ResendVerificationCodeAsync(email);
+                return Ok(new { message = "A new verification code has been sent to your email !" });
+            }
+            catch (UnauthorizedAccessException)
             {
                 return Unauthorized(new { message = "User not found." });
             }
-
-            string code = CommonUtils.GenerateVerificationCode();
-            await _authService.SendVerificationEmailAsync(user.Email, code);
-
-            var codes = await _supabaseService.GetAllAsync<UserCodeVerify>();
-            var codeVerify = codes.FirstOrDefault(e => e.UserId == user.Id);
-            codeVerify.VerifyCode = code;
-            await _supabaseService.UpdateAsync(codeVerify);
-
-            return Ok(new { message = "A new verification code has been sent to your email !" });
+            catch (Exception)
+            {
+                return StatusCode(500, new { message = "An internal server error occurred." });
+            }
         }
 
         
