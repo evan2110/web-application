@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Org.BouncyCastle.Asn1.Ocsp;
 using server.DTOs;
 using server.Models;
@@ -21,8 +22,9 @@ namespace server.Controllers
         private readonly IMailService _mail;
         private readonly IBlacklistService _blacklistService;
         private readonly IAuthService _authService;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(ISupabaseService supabaseService, ITokenService tokenService, IConfiguration configuration, IMailService mail, IBlacklistService blacklistService, IAuthService authService)
+        public AuthController(ISupabaseService supabaseService, ITokenService tokenService, IConfiguration configuration, IMailService mail, IBlacklistService blacklistService, IAuthService authService, ILogger<AuthController> logger)
         {
             _supabaseService = supabaseService;
             _tokenService = tokenService;
@@ -30,6 +32,7 @@ namespace server.Controllers
             _mail = mail;
             _blacklistService = blacklistService;
             _authService = authService;
+            _logger = logger;
         }
 
         [HttpPost("register")]
@@ -41,6 +44,7 @@ namespace server.Controllers
             }
             try
             {
+                _logger.LogInformation("Register requested for {Email}", request.Email);
                 if (await _authService.IsEmailTakenAsync(request.Email))
                     return Conflict(new { message = "Email already exists." });
 
@@ -63,6 +67,7 @@ namespace server.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error during register for {Email}", request.Email);
                 return StatusCode(500, new { message = "An internal server error occurred." });
             }
         }
@@ -76,6 +81,7 @@ namespace server.Controllers
             }
             try
             {
+                _logger.LogInformation("Login requested for {Email}", request.Email);
                 var user = await _authService.GetUserByEmailAsync(request.Email);
 
                 if (user == null || !_authService.VerifyPassword(request.Password, user.Password))
@@ -89,6 +95,7 @@ namespace server.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error during login for {Email}", request.Email);
                 return StatusCode(500, new { message = "An internal server error occurred." });
             }
         }
@@ -102,15 +109,18 @@ namespace server.Controllers
             }
             try
             {
+                _logger.LogInformation("Refresh token requested");
                 var result = await _authService.RefreshUsingRefreshTokenAsync(request.RefreshToken);
                 return Ok(result);
             }
             catch (UnauthorizedAccessException)
             {
+                _logger.LogWarning("Invalid or expired refresh token");
                 return Unauthorized(new { message = "Invalid or expired refresh token." });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error during token refresh");
                 return StatusCode(500, new { message = "An internal server error occurred." });
             }
         }
@@ -124,19 +134,23 @@ namespace server.Controllers
             }
             try
             {
+                _logger.LogInformation("Logout requested");
                 await _authService.LogoutAsync(request.RefreshToken!, request.AccessToken);
                 return Ok(new { message = "Logged out successfully." });
             }
             catch (KeyNotFoundException)
             {
+                _logger.LogWarning("Refresh token not found during logout");
                 return NotFound(new { message = "Refresh token not found." });
             }
             catch (InvalidOperationException)
             {
+                _logger.LogWarning("Refresh token already revoked during logout");
                 return BadRequest(new { message = "Refresh token already revoked." });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error during logout");
                 return StatusCode(500, new { message = "An internal server error occurred." });
             }
         }
@@ -150,19 +164,23 @@ namespace server.Controllers
             }
             try
             {
+                _logger.LogInformation("Verify requested for {Email}", request.Email);
                 var result = await _authService.VerifyUserAndIssueTokensAsync(request.Email, request.UserCodeVerify, request.RememberMe);
                 return Ok(result);
             }
             catch (UnauthorizedAccessException)
             {
+                _logger.LogWarning("User not found during verify for {Email}", request.Email);
                 return Unauthorized(new { message = "User not found." });
             }
             catch (ArgumentException)
             {
+                _logger.LogWarning("Verify code mismatch for {Email}", request.Email);
                 return BadRequest(new { message = "Verify code not matching." });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error during verify for {Email}", request.Email);
                 return StatusCode(500, new { message = "An internal server error occurred." });
             }
         }
@@ -180,15 +198,18 @@ namespace server.Controllers
             }
             try
             {
+                _logger.LogInformation("Resend verification requested for {Email}", email);
                 await _authService.ResendVerificationCodeAsync(email);
                 return Ok(new { message = "A new verification code has been sent to your email !" });
             }
             catch (UnauthorizedAccessException)
             {
+                _logger.LogWarning("User not found during resend for {Email}", email);
                 return Unauthorized(new { message = "User not found." });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error during resend for {Email}", email);
                 return StatusCode(500, new { message = "An internal server error occurred." });
             }
         }

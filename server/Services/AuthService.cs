@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using server.DTOs;
 using server.Models;
 using System.Security.Claims;
@@ -12,18 +13,21 @@ namespace server.Services
 		private readonly IConfiguration _configuration;
 		private readonly IMailService _mailService;
 		private readonly IBlacklistService _blacklistService;
+		private readonly ILogger<AuthService> _logger;
 
-		public AuthService(ISupabaseService supabaseService, ITokenService tokenService, IConfiguration configuration, IMailService mailService, IBlacklistService blacklistService)
+		public AuthService(ISupabaseService supabaseService, ITokenService tokenService, IConfiguration configuration, IMailService mailService, IBlacklistService blacklistService, ILogger<AuthService> logger)
 		{
 			_supabaseService = supabaseService;
 			_tokenService = tokenService;
 			_configuration = configuration;
 			_mailService = mailService;
 			_blacklistService = blacklistService;
+			_logger = logger;
 		}
 
 		public async Task<User?> GetUserByEmailAsync(string email)
 		{
+			_logger.LogDebug("Fetching user by email {Email}", email);
 			return await _supabaseService.GetClient()
 				.From<User>()
 				.Where(u => u.Email == email)
@@ -32,11 +36,14 @@ namespace server.Services
 
 		public async Task<bool> IsEmailTakenAsync(string email)
 		{
+			_logger.LogDebug("Checking if email exists {Email}", email);
 			var existing = await _supabaseService.GetClient()
 				.From<User>()
 				.Where(u => u.Email == email)
 				.Get();
-			return existing.Models?.Any() == true;
+			var taken = existing.Models?.Any() == true;
+			if (taken) _logger.LogInformation("Email already exists {Email}", email);
+			return taken;
 		}
 
 		public bool VerifyPassword(string plainText, string hashed)
@@ -46,6 +53,7 @@ namespace server.Services
 
 		public async Task<User> CreateUserAsync(string email, string password, string? userType)
 		{
+			_logger.LogInformation("Creating user for {Email}", email);
 			string passwordHash = BCrypt.Net.BCrypt.HashPassword(password);
 			var newUser = new User
 			{
@@ -58,7 +66,11 @@ namespace server.Services
 
 			var createdUser = await _supabaseService.CreateAsync(newUser);
 			if (createdUser == null)
+			{
+				_logger.LogError("Failed to create user for {Email}", email);
 				throw new Exception("Failed to create user");
+			}
+			_logger.LogInformation("User created successfully with id {UserId}", createdUser.Id);
 			return createdUser;
 		}
 
@@ -67,6 +79,7 @@ namespace server.Services
 			if (!string.Equals(user.UserType, "admin", StringComparison.OrdinalIgnoreCase))
 				return false;
 
+			_logger.LogInformation("Ensuring admin verification for userId {UserId}", user.Id);
 			var code = Utilities.CommonUtils.GenerateVerificationCode();
 
 			var existing = await _supabaseService.GetClient()
@@ -78,6 +91,7 @@ namespace server.Services
 			{
 				existing.VerifyCode = code;
 				await _supabaseService.UpdateAsync(existing);
+				_logger.LogInformation("Updated admin verification code for userId {UserId}", user.Id);
 			}
 			else
 			{
@@ -90,14 +104,17 @@ namespace server.Services
 				};
 
 				await _supabaseService.CreateAsync(userCodeVerify);
+				_logger.LogInformation("Created admin verification code for userId {UserId}", user.Id);
 			}
 
 			await SendVerificationEmailAsync(user.Email, code);
+			_logger.LogInformation("Sent admin verification email to {Email}", user.Email);
 			return true;
 		}
 
 		public async Task<object> GenerateTokenResponseAsync(User user, bool rememberMe = false)
 		{
+			_logger.LogInformation("Generating token response for userId {UserId}", user.Id);
 			var claims = new List<Claim>
 			{
 				new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
@@ -138,6 +155,7 @@ namespace server.Services
 
 		public async Task<object> RefreshUsingRefreshTokenAsync(string refreshTokenValue)
 		{
+			_logger.LogInformation("Attempting to refresh tokens");
 			var tokens = await _supabaseService.GetClient()
 				.From<RefreshToken>()
 				.Where(t => t.Token == refreshTokenValue)
@@ -145,6 +163,7 @@ namespace server.Services
 			var existingToken = tokens.Models?.FirstOrDefault();
 			if (existingToken == null || existingToken.RevokedAt != null || existingToken.ExpiresAt <= DateTime.Now)
 			{
+				_logger.LogWarning("Refresh token invalid or expired");
 				throw new UnauthorizedAccessException("Invalid or expired refresh token.");
 			}
 
@@ -154,12 +173,14 @@ namespace server.Services
 				.Single();
 			if (user == null)
 			{
+				_logger.LogWarning("User for refresh token not found. userId {UserId}", existingToken.UserId);
 				throw new UnauthorizedAccessException("User not found.");
 			}
 
 			// Revoke old refresh token
 			existingToken.RevokedAt = DateTime.Now;
 			await _supabaseService.UpdateAsync(existingToken);
+			_logger.LogInformation("Revoked old refresh token for userId {UserId}", user.Id);
 
 			// Create claims and new tokens
 			var claims = new List<Claim>
@@ -182,6 +203,7 @@ namespace server.Services
 			};
 
 			await _supabaseService.CreateAsync(newRefreshToken);
+			_logger.LogInformation("Issued new tokens for userId {UserId}", user.Id);
 
 			return new
 			{
@@ -192,6 +214,7 @@ namespace server.Services
 
 		public async Task SendVerificationEmailAsync(string toEmail, string code)
 		{
+			_logger.LogInformation("Sending verification email to {Email}", toEmail);
 			MailDataReqDTO mailDataReq = new MailDataReqDTO();
 			mailDataReq.ToEmail = toEmail;
 			mailDataReq.Subject = "Verify account";
@@ -210,6 +233,7 @@ namespace server.Services
 
 		public async Task<object> VerifyUserAndIssueTokensAsync(string email, string verifyCode, bool rememberMe)
 		{
+			_logger.LogInformation("Verifying user with email {Email}", email);
 			var user = await _supabaseService.GetClient()
 				.From<User>()
 				.Where(u => u.Email == email)
@@ -222,13 +246,19 @@ namespace server.Services
 				.Where(c => c.UserId == user.Id)
 				.Single();
 			if (codes == null || string.IsNullOrWhiteSpace(codes.VerifyCode) || codes.VerifyCode.Trim() != verifyCode.Trim())
+			{
+				_logger.LogWarning("Verify code not matching for userId {UserId}", user.Id);
 				throw new ArgumentException("Verify code not matching.");
+			}
+
+			_logger.LogInformation("User verified successfully {UserId}", user.Id);
 
 			return await GenerateTokenResponseAsync(user, rememberMe);
 		}
 
 		public async Task ResendVerificationCodeAsync(string email)
 		{
+			_logger.LogInformation("Resending verification code to {Email}", email);
 			var user = await _supabaseService.GetClient()
 				.From<User>()
 				.Where(u => u.Email == email)
@@ -247,6 +277,7 @@ namespace server.Services
 			{
 				existing.VerifyCode = code;
 				await _supabaseService.UpdateAsync(existing);
+				_logger.LogInformation("Updated verification code for userId {UserId}", user.Id);
 			}
 			else
 			{
@@ -259,13 +290,16 @@ namespace server.Services
 				};
 
 				await _supabaseService.CreateAsync(userCodeVerify);
+				_logger.LogInformation("Created verification code for userId {UserId}", user.Id);
 			}
 
 			await SendVerificationEmailAsync(user.Email, code);
+			_logger.LogInformation("Sent verification email to {Email}", user.Email);
 		}
 
 		public async Task LogoutAsync(string refreshToken, string? accessToken)
 		{
+			_logger.LogInformation("Logout requested");
 			var tokens = await _supabaseService.GetClient()
 				.From<RefreshToken>()
 				.Where(t => t.Token == refreshToken)
@@ -273,20 +307,24 @@ namespace server.Services
 			var storedToken = tokens.Models?.FirstOrDefault();
 			if (storedToken == null)
 			{
+				_logger.LogWarning("Refresh token not found during logout");
 				throw new KeyNotFoundException("Refresh token not found.");
 			}
 			if (storedToken.RevokedAt != null)
 			{
+				_logger.LogWarning("Refresh token already revoked");
 				throw new InvalidOperationException("Refresh token already revoked.");
 			}
 
 			if (!string.IsNullOrWhiteSpace(accessToken))
 			{
 				await _blacklistService.AddTokenToBlacklistAsync(accessToken, storedToken.UserId, "User logout");
+				_logger.LogInformation("Access token blacklisted for userId {UserId}", storedToken.UserId);
 			}
 
 			storedToken.RevokedAt = DateTime.Now;
 			await _supabaseService.UpdateAsync(storedToken);
+			_logger.LogInformation("Refresh token revoked for userId {UserId}", storedToken.UserId);
 		}
 	}
 }

@@ -1,4 +1,5 @@
-﻿using Microsoft.IdentityModel.Tokens;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -10,15 +11,18 @@ namespace server.Services
     {
         private readonly IConfiguration _configuration;
         private readonly IBlacklistService _blacklistService;
+        private readonly ILogger<TokenService> _logger;
 
-        public TokenService(IConfiguration configuration, IBlacklistService blacklistService)
+        public TokenService(IConfiguration configuration, IBlacklistService blacklistService, ILogger<TokenService> logger)
         {
             _configuration = configuration;
             _blacklistService = blacklistService;
+            _logger = logger;
         }
 
         public string GenerateAccessToken(IEnumerable<Claim> claims)
         {
+            _logger.LogDebug("Generating access token with {ClaimCount} claims", claims.Count());
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:SecretKey"]!));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
             var token = new JwtSecurityToken(
@@ -29,11 +33,14 @@ namespace server.Services
                 signingCredentials: creds
             );
 
-            return new JwtSecurityTokenHandler().WriteToken(token);
+            var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+            _logger.LogDebug("Access token generated");
+            return tokenString;
         }
 
         public string GenerateRefreshToken()
         {
+            _logger.LogDebug("Generating refresh token");
             var randomBytes = new byte[64];
             using var rng = RandomNumberGenerator.Create();
             rng.GetBytes(randomBytes);
@@ -42,6 +49,7 @@ namespace server.Services
 
         public bool ValidateAccessToken(string token)
         {
+            _logger.LogDebug("Validating access token");
             var tokenHandler = new JwtSecurityTokenHandler();
             var secretKey = _configuration["Jwt:SecretKey"];
             var issuer = _configuration["Jwt:Issuer"];
@@ -74,14 +82,14 @@ namespace server.Services
 
                 return true;
             }
-            catch (SecurityTokenException)
+            catch (SecurityTokenException ex)
             {
-                // Token invalid, expired, wrong signature, etc.
+                _logger.LogWarning(ex, "Access token failed validation");
                 return false;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // others
+                _logger.LogError(ex, "Unexpected error while validating access token");
                 return false;
             }
         }
@@ -94,6 +102,7 @@ namespace server.Services
 
             // Then check if token is blacklisted
             var isBlacklisted = await _blacklistService.IsTokenBlacklistedAsync(token);
+            if (isBlacklisted) _logger.LogWarning("Token is blacklisted");
             return !isBlacklisted;
         }
     }
