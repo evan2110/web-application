@@ -4,7 +4,7 @@ A full‑stack demo implementing authentication with JWT access/refresh tokens, 
 
 ### Features
 - **User registration and login**: Email + password with hashed storage (BCrypt).
-- **Email verification (link-based)**: Verification link sent on registration; account activated on success.
+- **Email verification (link-based)**: Verification link sent on registration; client page `/verify-email` calls API and shows success/failure.
 - **Admin code verification (2-step on login)**: Admin users must enter a verification code emailed at login.
 - **Resend verification code**: Endpoint to resend admin verification code.
 - **Forgot/Reset password**: Email reset link with token, secure password update.
@@ -14,6 +14,7 @@ A full‑stack demo implementing authentication with JWT access/refresh tokens, 
 - **Protected routes (client)**: Guarded views using React Router.
 - **Basic profile and todo demo pages**: Example UI wiring with context for auth state.
 - **Swagger/OpenAPI**: Interactive API docs in development.
+- **Role-based Admin UI (client)**: Admin-only dashboard and Users list; guarded on client and server.
 
 ### System Architecture
 - **Client**: React 18 (Create React App), React Router v6.
@@ -30,6 +31,8 @@ The schema contains four main tables, matching the diagram provided:
   - `password` (varchar, BCrypt‑hashed)
   - `user_type` (varchar)
   - `confirmed_at` (timestamptz, nullable)
+  - `confirmed_token` (varchar, nullable)
+  - `reset_token` (varchar, nullable)
 
 - **refresh_token**
   - `id` (int8, PK)
@@ -55,10 +58,44 @@ The schema contains four main tables, matching the diagram provided:
 
 Relations: `user` has many `refresh_token`, many `blacklisted_token`, and many `user_code_verify` records.
 
+#### Schema
+
+User (`user`)
+- id: bigint, primary key
+- created_at: timestamptz, required, default now()
+- email: varchar, required, unique
+- password: varchar, required (BCrypt hashed)
+- user_type: varchar, required
+- confirmed_at: timestamptz, nullable
+- confirmed_token: varchar, nullable
+- reset_token: varchar, nullable
+
+RefreshToken (`refresh_token`)
+- id: bigint, primary key
+- created_at: timestamptz, required, default now()
+- token: varchar, required
+- expires_at: timestamptz, required
+- revoked_at: timestamptz, nullable
+- user_id: bigint, required, FK → user.id (cascade on delete)
+
+BlacklistedToken (`blacklisted_token`)
+- id: bigint, primary key
+- blacklisted_at: timestamptz, required, default now()
+- token: varchar, required
+- expires_at: timestamptz, required
+- user_id: bigint, nullable, FK → user.id (set null on delete)
+- reason: varchar, required
+
+UserCodeVerify (`user_code_verify`)
+- id: bigint, primary key
+- user_id: bigint, required, FK → user.id (cascade on delete)
+- verify_code: varchar, required
+- status: int, required
+
 ### API Overview (Server)
 - `AuthController`
   - `POST /api/auth/register`: Register a new user and send a verification code.
-  - `GET /api/auth/verify-email?token=...`: Verify email via link; activates the account.
+  - `GET /api/auth/verify-email?token=...`: Validate verification token; returns JSON success/error. Client page handles UX.
   - `POST /api/auth/verify`: Verify admin code during login and issue tokens.
   - `POST /api/auth/login`: Authenticate; returns access and refresh tokens.
   - `POST /api/auth/refresh`: Exchange refresh token for a new access token.
@@ -66,6 +103,8 @@ Relations: `user` has many `refresh_token`, many `blacklisted_token`, and many `
   - `GET /api/auth/sendMail?email=...`: Resend admin verification code to an email.
   - `POST /api/auth/forgot-password`: Send password reset link to email.
   - `POST /api/auth/reset-password`: Reset password using a valid reset token.
+- `UsersController`
+  - `GET /api/users` (Admin only): Returns list of users. Secured with `[Authorize(Roles = "admin")]`.
 
 Middleware and services:
 - `TokenValidationMiddleware`: Handles token validation and blacklist checks.
@@ -103,8 +142,9 @@ Server (`server/server.csproj`):
 - Configure JWT and mail settings in `server/appsettings.json` (and `appsettings.Development.json`).
 - CORS is enabled for `http://localhost:3000` in `Program.cs`.
 - Email verification and password reset use base URLs from config:
-  - `Frontend:BaseUrl` (redirect target and client links)
-  - `Backend:BaseUrl` (build verification links sent in emails)
+  - `Frontend:BaseUrl` (client links, e.g., `/verify-email?token=...`)
+  - `Backend:BaseUrl` (server origin)
+- Messages: `Messages` section defines all user-facing texts; controllers use `IMessageProvider` with codes from `CommonUtils.MessageCodes`.
 
 ### Running Locally
 1. Server (HTTPS)
@@ -118,11 +158,11 @@ Server (`server/server.csproj`):
    - Note: Project is configured to redirect HTTP → HTTPS.
 2. Client (React)
    - Node 16+ recommended.
-   - Create env file `client/.env` with API base URL:
+   - Create env file `client/.env` with API base URL (optional in dev due to proxy):
      - `REACT_APP_API_BASE_URL=https://localhost:7297`
    - From `client/`:
      - Install deps: `npm install`
-     - Start dev server: `npm start`
+     - Start dev server: `npm start` (dev proxy to API is configured in `client/package.json`)
    - The app runs on: `http://localhost:3000`
    - The client reads the API base URL from `REACT_APP_API_BASE_URL`.
 
@@ -134,6 +174,7 @@ Server (`server/server.csproj`):
 ### Notes
 - Access tokens are short‑lived; refresh tokens are stored in DB and can be revoked.
 - On logout, tokens are blacklisted; middleware rejects blacklisted tokens.
+- Admin role string is `admin` (lowercase) in both client guards and server `[Authorize(Roles = "admin")]`.
 
 ### Tests & Coverage
 - Run unit tests (server):
