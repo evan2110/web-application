@@ -23,8 +23,9 @@ namespace server.Controllers
         private readonly IBlacklistService _blacklistService;
         private readonly IAuthService _authService;
         private readonly ILogger<AuthController> _logger;
+        private readonly IMessageProvider _messages;
 
-        public AuthController(ISupabaseService supabaseService, ITokenService tokenService, IConfiguration configuration, IMailService mail, IBlacklistService blacklistService, IAuthService authService, ILogger<AuthController> logger)
+        public AuthController(ISupabaseService supabaseService, ITokenService tokenService, IConfiguration configuration, IMailService mail, IBlacklistService blacklistService, IAuthService authService, ILogger<AuthController> logger, IMessageProvider messages)
         {
             _supabaseService = supabaseService;
             _tokenService = tokenService;
@@ -33,6 +34,7 @@ namespace server.Controllers
             _blacklistService = blacklistService;
             _authService = authService;
             _logger = logger;
+            _messages = messages;
         }
 
         [HttpPost("register")]
@@ -46,13 +48,13 @@ namespace server.Controllers
             {
                 _logger.LogInformation("Register requested for {Email}", request.Email);
                 if (await _authService.IsEmailTakenAsync(request.Email))
-                    return Conflict(new { message = "Email already exists." });
+                    return Conflict(new { message = _messages.Get(CommonUtils.MessageCodes.EmailAlreadyExists) });
 
                 var createdUser = await _authService.CreateUserAsync(request.Email, request.Password, request.UserType);
 
                 if (createdUser == null)
                 {
-                    return StatusCode(500, new { message = "Failed to create user due to a server error." });
+                    return StatusCode(500, new { message = _messages.Get(CommonUtils.MessageCodes.FailedCreateUser) });
                 }
 
                 var userDto = new UserDto
@@ -68,7 +70,7 @@ namespace server.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during register for {Email}", request.Email);
-                return StatusCode(500, new { message = "An internal server error occurred." });
+                return StatusCode(500, new { message = _messages.Get(CommonUtils.MessageCodes.InternalServerError) });
             }
         }
 
@@ -85,10 +87,10 @@ namespace server.Controllers
                 var user = await _authService.GetUserByEmailAsync(request.Email);
 
                 if (user == null || !_authService.VerifyPassword(request.Password, user.Password))
-                    return Unauthorized(new { message = "Invalid email or password." });
+                    return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.InvalidEmailOrPassword) });
 
                 if (await _authService.EnsureAdminVerificationAsync(user))
-                    return Conflict(new { message = "Please authenticate your login." });
+                    return Conflict(new { message = _messages.Get(CommonUtils.MessageCodes.PleaseAuthenticateLogin) });
 
                 var tokenResponse = await _authService.GenerateTokenResponseAsync(user, request.RememberMe);
                 return Ok(tokenResponse);
@@ -96,7 +98,7 @@ namespace server.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during login for {Email}", request.Email);
-                return StatusCode(500, new { message = "An internal server error occurred." });
+                return StatusCode(500, new { message = _messages.Get(CommonUtils.MessageCodes.InternalServerError) });
             }
         }
 
@@ -116,12 +118,12 @@ namespace server.Controllers
             catch (UnauthorizedAccessException)
             {
                 _logger.LogWarning("Invalid or expired refresh token");
-                return Unauthorized(new { message = "Invalid or expired refresh token." });
+                return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.InvalidOrExpiredRefreshToken) });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during token refresh");
-                return StatusCode(500, new { message = "An internal server error occurred." });
+                return StatusCode(500, new { message = _messages.Get(CommonUtils.MessageCodes.InternalServerError) });
             }
         }
 
@@ -141,17 +143,17 @@ namespace server.Controllers
             catch (KeyNotFoundException)
             {
                 _logger.LogWarning("Refresh token not found during logout");
-                return NotFound(new { message = "Refresh token not found." });
+                return NotFound(new { message = _messages.Get(CommonUtils.MessageCodes.RefreshTokenNotFound) });
             }
             catch (InvalidOperationException)
             {
                 _logger.LogWarning("Refresh token already revoked during logout");
-                return BadRequest(new { message = "Refresh token already revoked." });
+                return BadRequest(new { message = _messages.Get(CommonUtils.MessageCodes.RefreshTokenAlreadyRevoked) });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during logout");
-                return StatusCode(500, new { message = "An internal server error occurred." });
+                return StatusCode(500, new { message = _messages.Get(CommonUtils.MessageCodes.InternalServerError) });
             }
         }
 
@@ -171,17 +173,17 @@ namespace server.Controllers
             catch (UnauthorizedAccessException)
             {
                 _logger.LogWarning("User not found during verify for {Email}", request.Email);
-                return Unauthorized(new { message = "User not found." });
+                return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.UserNotFound) });
             }
             catch (ArgumentException)
             {
                 _logger.LogWarning("Verify code mismatch for {Email}", request.Email);
-                return BadRequest(new { message = "Verify code not matching." });
+                return BadRequest(new { message = _messages.Get(CommonUtils.MessageCodes.VerifyCodeNotMatching) });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during verify for {Email}", request.Email);
-                return StatusCode(500, new { message = "An internal server error occurred." });
+                return StatusCode(500, new { message = _messages.Get(CommonUtils.MessageCodes.InternalServerError) });
             }
         }
 
@@ -190,27 +192,27 @@ namespace server.Controllers
         {
             if (string.IsNullOrWhiteSpace(email))
             {
-                return BadRequest(new { message = "Email is required." });
+                return BadRequest(new { message = _messages.Get(CommonUtils.MessageCodes.EmailRequired) });
             }
             if (!CommonUtils.IsValidEmail(email))
             {
-                return BadRequest(new { message = "Email is wrong format." });
+                return BadRequest(new { message = _messages.Get(CommonUtils.MessageCodes.EmailWrongFormat) });
             }
             try
             {
                 _logger.LogInformation("Resend verification requested for {Email}", email);
                 await _authService.ResendVerificationCodeAsync(email);
-                return Ok(new { message = "A new verification code has been sent to your email !" });
+                return Ok(new { message = _messages.Get(CommonUtils.MessageCodes.VerifyCodeSent) });
             }
             catch (UnauthorizedAccessException)
             {
                 _logger.LogWarning("User not found during resend for {Email}", email);
-                return Unauthorized(new { message = "User not found." });
+                return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.UserNotFound) });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during resend for {Email}", email);
-                return StatusCode(500, new { message = "An internal server error occurred." });
+                return StatusCode(500, new { message = _messages.Get(CommonUtils.MessageCodes.InternalServerError) });
             }
         }
 

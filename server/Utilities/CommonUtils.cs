@@ -5,6 +5,28 @@ namespace server.Utilities
 {
     public static class CommonUtils
     {
+        public static class UserRoles
+        {
+            public const string Admin = "admin";
+        }
+        public static class MessageCodes
+        {
+            public const string EmailAlreadyExists = "EMAIL_ALREADY_EXISTS";
+            public const string FailedCreateUser = "FAILED_CREATE_USER";
+            public const string InternalServerError = "INTERNAL_SERVER_ERROR";
+            public const string InvalidEmailOrPassword = "INVALID_EMAIL_OR_PASSWORD";
+            public const string PleaseAuthenticateLogin = "PLEASE_AUTHENTICATE_LOGIN";
+            public const string RefreshTokenRequired = "REFRESH_TOKEN_REQUIRED";
+            public const string InvalidOrExpiredRefreshToken = "INVALID_OR_EXPIRED_REFRESH_TOKEN";
+            public const string UserNotFound = "USER_NOT_FOUND";
+            public const string RefreshTokenNotFound = "REFRESH_TOKEN_NOT_FOUND";
+            public const string RefreshTokenAlreadyRevoked = "REFRESH_TOKEN_ALREADY_REVOKED";
+            public const string VerifyCodeRequired = "VERIFY_CODE_REQUIRED";
+            public const string VerifyCodeNotMatching = "VERIFY_CODE_NOT_MATCHING";
+            public const string EmailRequired = "EMAIL_REQUIRED";
+            public const string EmailWrongFormat = "EMAIL_WRONG_FORMAT";
+            public const string VerifyCodeSent = "VERIFY_CODE_SENT";
+        }
         public static string GenerateVerificationCode()
         {
             var codeLength = 6;
@@ -26,6 +48,27 @@ namespace server.Utilities
             string emailPattern = @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$";
 
             return Regex.IsMatch(email, emailPattern);
+        }
+    }
+
+    public interface IMessageProvider
+    {
+        string Get(string code, string? defaultMessage = null);
+    }
+
+    public class MessageProvider : IMessageProvider
+    {
+        private readonly IConfiguration _configuration;
+
+        public MessageProvider(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
+
+        public string Get(string code, string? defaultMessage = null)
+        {
+            var value = _configuration[$"Messages:{code}"];
+            return string.IsNullOrWhiteSpace(value) ? (defaultMessage ?? code) : value;
         }
     }
 }

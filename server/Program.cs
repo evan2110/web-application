@@ -5,6 +5,7 @@ using server.DTOs;
 using server.Middleware;
 using server.Services;
 using System.Text;
+using server.Utilities;
 
 namespace server
 {
@@ -65,6 +66,7 @@ namespace server
             builder.Services.AddTransient<IMailService, MailService>();
             builder.Services.AddScoped<IAuthService, AuthService>();
             builder.Services.Configure<MailSettingsDTO>(builder.Configuration.GetSection("MailSettingsDTO"));
+            builder.Services.AddSingleton<IMessageProvider>(sp => new MessageProvider(builder.Configuration));
             
             // Add background service for cleanup
             builder.Services.AddHostedService<BlacklistCleanupService>();

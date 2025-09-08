@@ -76,7 +76,7 @@ namespace server.Services
 
 		public async Task<bool> EnsureAdminVerificationAsync(User user)
 		{
-			if (!string.Equals(user.UserType, "admin", StringComparison.OrdinalIgnoreCase))
+			if (!string.Equals(user.UserType, Utilities.CommonUtils.UserRoles.Admin, StringComparison.OrdinalIgnoreCase))
 				return false;
 
 			_logger.LogInformation("Ensuring admin verification for userId {UserId}", user.Id);
