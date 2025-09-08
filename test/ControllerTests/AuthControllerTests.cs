@@ -315,31 +315,27 @@ namespace test.controllerTest
 		private delegate void TryValidateDelegate(string token, out string email);
 
 		[Fact]
-		public async Task VerifyEmail_Redirect_OnSuccess_UsesConfiguredFrontend()
+		public async Task VerifyEmail_Ok_OnSuccess_WhenTokenMatchesStored()
 		{
-			var (controller, _, token, _, _, auth, configuration, _) = Build();
+			var (controller, _, token, _, _, auth, _, _) = Build();
 			string email;
 			token.Setup(t => t.TryValidateEmailVerificationToken("tok", out email)).Callback(new TryValidateDelegate((string _, out string e) => e = "u@x.com")).Returns(true);
-			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 5, Email = "u@x.com" });
+			var user = new User { Id = 5, Email = "u@x.com", ConfirmedToken = "tok" };
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(user);
 			auth.Setup(a => a.UpdateUserAsync(It.IsAny<User>())).Returns(Task.CompletedTask);
 			var result = await controller.VerifyEmail("tok");
-			result.Should().BeOfType<RedirectResult>();
-			(result as RedirectResult)!.Url!.Should().StartWith("http://frontend.local/login?verified=true");
+			result.Should().BeOfType<OkObjectResult>();
 		}
 
 		[Fact]
-		public async Task VerifyEmail_Redirect_OnSuccess_UsesOriginHeaderWhenNoConfig()
+		public async Task VerifyEmail_BadRequest_WhenStoredTokenMismatch()
 		{
 			var (controller, _, token, _, _, auth, _, _) = Build();
-			// override Frontend:BaseUrl to be empty
-			(controller.ControllerContext.HttpContext!.Request.Headers)["Origin"] = "http://origin.local";
 			string email;
 			token.Setup(t => t.TryValidateEmailVerificationToken("tok", out email)).Callback(new TryValidateDelegate((string _, out string e) => e = "u@x.com")).Returns(true);
-			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 6, Email = "u@x.com" });
-			auth.Setup(a => a.UpdateUserAsync(It.IsAny<User>())).Returns(Task.CompletedTask);
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 6, Email = "u@x.com", ConfirmedToken = "other" });
 			var result = await controller.VerifyEmail("tok");
-			result.Should().BeOfType<RedirectResult>();
-			(result as RedirectResult)!.Url!.Should().StartWith("http://frontend.local/login?verified=true");
+			result.Should().BeOfType<BadRequestObjectResult>();
 		}
 
 		[Fact]
@@ -443,7 +439,9 @@ namespace test.controllerTest
 			var (controller, _, token, _, _, auth, _, _) = Build();
 			string email;
 			token.Setup(t => t.TryValidatePasswordResetToken("ok", out email)).Callback(new TryValidateDelegate((string _, out string e) => e = "u@x.com")).Returns(true);
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 10, Email = "u@x.com", ResetToken = "ok" });
 			auth.Setup(a => a.ResetPasswordAsync("u@x.com", "123456")).Returns(Task.CompletedTask);
+			auth.Setup(a => a.UpdateUserAsync(It.IsAny<User>())).Returns(Task.CompletedTask);
 			var result = await controller.ResetPassword(new ResetPasswordDTO { Token = "ok", NewPassword = "123456" });
 			result.Should().BeOfType<OkObjectResult>();
 		}

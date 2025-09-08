@@ -53,6 +53,46 @@ namespace test.ServiceTests
             var ok = await service.ValidateAccessTokenWithBlacklistAsync(access);
             ok.Should().BeFalse();
         }
+
+        [Fact]
+        public void TryValidatePasswordResetToken_Succeeds_With_Generated_Token()
+        {
+            var (service, _, _) = Build();
+            var token = service.GeneratePasswordResetToken("u@x.com");
+            service.TryValidatePasswordResetToken(token, out var email).Should().BeTrue();
+            email.Should().Be("u@x.com");
+        }
+
+        [Fact]
+        public void TryValidatePasswordResetToken_Fails_For_Wrong_Type()
+        {
+            var (service, _, _) = Build();
+            var token = service.GenerateEmailVerificationToken("u@x.com");
+            service.TryValidatePasswordResetToken(token, out var _).Should().BeFalse();
+        }
+
+        [Fact]
+        public void TryValidateEmailVerificationToken_Succeeds_With_Generated_Token()
+        {
+            var (service, _, _) = Build();
+            var token = service.GenerateEmailVerificationToken("u@x.com");
+            service.TryValidateEmailVerificationToken(token, out var email).Should().BeTrue();
+            email.Should().Be("u@x.com");
+        }
+
+        [Fact]
+        public void TryValidateEmailVerificationToken_Fails_For_Invalid_Token()
+        {
+            var (service, _, _) = Build();
+            service.TryValidateEmailVerificationToken("invalid.jwt", out var _).Should().BeFalse();
+        }
+
+        [Fact]
+        public void ValidateAccessToken_Fails_For_Invalid_Token()
+        {
+            var (service, _, _) = Build();
+            service.ValidateAccessToken("invalid").Should().BeFalse();
+        }
     }
 }
 

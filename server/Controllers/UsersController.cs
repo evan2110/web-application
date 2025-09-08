@@ -30,18 +30,16 @@ namespace server.Controllers
             try
             {
                 _logger.LogInformation("Admin requested user list");
-                var users = await _supabaseService.GetClient()
-                    .From<User>()
-                    .Get();
+                var users = await _supabaseService.GetAllAsync<User>();
 
-                var models = users.Models?.Select(u => new
+                var models = users.Select(u => new
                 {
                     id = u.Id,
                     email = u.Email,
                     userType = u.UserType,
                     createdAt = u.CreatedAt,
                     confirmedAt = u.ConfirmedAt
-                }) ?? Enumerable.Empty<object>();
+                });
 
                 return Ok(models);
             }

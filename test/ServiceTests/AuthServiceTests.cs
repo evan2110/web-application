@@ -61,6 +61,8 @@ namespace test.ServiceTests
             mail.Verify(m => m.SendAsync(It.Is<MailDataReqDTO>(d => d.ToEmail == "u@x.com" && d.Subject.Contains("Verify"))), Times.Once);
         }
 
+        
+
         [Fact]
         public async Task GenerateTokenResponseAsync_ReturnsTokens_And_StoresRefreshToken()
         {
