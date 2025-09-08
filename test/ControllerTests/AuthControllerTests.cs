@@ -1,6 +1,8 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Moq;
 using server.Controllers;
 using server.DTOs;
@@ -10,249 +12,440 @@ using server.Utilities;
 
 namespace test.controllerTest
 {
-    public class AuthControllerTests
-    {
-        private (AuthController controller, Mock<ISupabaseService> supabase, Mock<ITokenService> token, Mock<IMailService> mail, Mock<IBlacklistService> blacklist, IConfiguration configuration) BuildController()
-        {
-            var supabase = new Mock<ISupabaseService>();
-            var token = new Mock<ITokenService>();
-            var mail = new Mock<IMailService>();
-            var blacklist = new Mock<IBlacklistService>();
+	public class AuthControllerTests
+	{
+		private (AuthController controller,
+			Mock<ISupabaseService> supabase,
+			Mock<ITokenService> token,
+			Mock<IMailService> mail,
+			Mock<IBlacklistService> blacklist,
+			Mock<IAuthService> auth,
+			IConfiguration configuration,
+			Mock<IMessageProvider> messages) Build()
+		{
+			var supabase = new Mock<ISupabaseService>();
+			var token = new Mock<ITokenService>();
+			var mail = new Mock<IMailService>();
+			var blacklist = new Mock<IBlacklistService>();
+			var auth = new Mock<IAuthService>();
+			var logger = new Mock<ILogger<AuthController>>();
+			var messages = new Mock<IMessageProvider>();
+			messages.Setup(m => m.Get(It.IsAny<string>(), It.IsAny<string?>()))
+				.Returns((string code, string? d) => code);
 
-            var inMemorySettings = new Dictionary<string, string?>
-            {
-                { "Jwt:Issuer", "test-issuer" },
-                { "Jwt:Audience", "test-aud" },
-                { "Jwt:SecretKey", new string('a', 32) },
-                { "Jwt:RefreshTokenExpirationDays", "7" }
-            };
-            IConfiguration configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(inMemorySettings!)
-                .Build();
+			var settings = new Dictionary<string, string?>
+			{
+				{ "Jwt:Issuer", "issuer" },
+				{ "Jwt:Audience", "aud" },
+				{ "Jwt:SecretKey", new string('a', 64) },
+				{ "Jwt:RefreshTokenExpirationDays", "7" },
+				{ "Frontend:BaseUrl", "http://frontend.local" }
+			};
+			var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings!).Build();
 
-            var controller = new AuthController(supabase.Object, token.Object, configuration, mail.Object, blacklist.Object);
-            return (controller, supabase, token, mail, blacklist, configuration);
-        }
+			var controller = new AuthController(supabase.Object, token.Object, configuration, mail.Object, blacklist.Object, auth.Object, logger.Object, messages.Object)
+			{
+				ControllerContext = new ControllerContext
+				{
+					HttpContext = new DefaultHttpContext()
+				}
+			};
 
-        [Fact]
-        public async Task Register_ReturnsBadRequest_WhenInvalidPayload()
-        {
-            var (controller, _, _, _, _, _) = BuildController();
-            var request = new RegisterDTO { Email = " ", Password = " ", UserType = " " };
+			return (controller, supabase, token, mail, blacklist, auth, configuration, messages);
+		}
 
-            var result = await controller.Register(request);
+		[Fact]
+		public async Task Register_BadRequest_WhenModelInvalid()
+		{
+			var (controller, _, _, _, _, _, _, _) = Build();
+			controller.ModelState.AddModelError("Email", "Required");
+			var result = await controller.Register(new RegisterDTO());
+			result.Should().BeOfType<BadRequestObjectResult>();
+		}
 
-            result.Should().BeOfType<BadRequestObjectResult>();
-        }
+		[Fact]
+		public async Task Register_Conflict_WhenEmailTaken()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.IsEmailTakenAsync("e@x.com")).ReturnsAsync(true);
+			var result = await controller.Register(new RegisterDTO { Email = "e@x.com", Password = "123456", UserType = "user" });
+			result.Should().BeOfType<ConflictObjectResult>();
+		}
 
-        [Fact]
-        public async Task Register_ReturnsConflict_WhenEmailExists()
-        {
-            var (controller, supabase, _, _, _, _) = BuildController();
+		[Fact]
+		public async Task Register_500_WhenCreateUserReturnsNull()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.IsEmailTakenAsync(It.IsAny<string>())).ReturnsAsync(false);
+			auth.Setup(a => a.CreateUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>()))
+				.ReturnsAsync((server.Models.User?)null);
+			var result = await controller.Register(new RegisterDTO { Email = "a@b.com", Password = "123456", UserType = "user" });
+			(result as ObjectResult)!.StatusCode.Should().Be(500);
+		}
 
-            var existing = new List<User>
-            {
-                new User { Id = 1, Email = "john@example.com", Password = "hash", UserType = "user", CreatedAt = DateTime.Now }
-            };
-            supabase.Setup(s => s.GetAllAsync<User>()).ReturnsAsync(existing);
+		[Fact]
+		public async Task Register_Ok_OnSuccess()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.IsEmailTakenAsync(It.IsAny<string>())).ReturnsAsync(false);
+			auth.Setup(a => a.CreateUserAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>()))
+				.ReturnsAsync(new User { Id = 1, Email = "a@b.com" });
+			var result = await controller.Register(new RegisterDTO { Email = "a@b.com", Password = "123456", UserType = "user" });
+			result.Should().BeOfType<OkObjectResult>();
+		}
 
-            var request = new RegisterDTO { Email = "john@example.com", Password = "123456", UserType = "user" };
+		[Fact]
+		public async Task Login_BadRequest_WhenModelInvalid()
+		{
+			var (controller, _, _, _, _, _, _, _) = Build();
+			controller.ModelState.AddModelError("Email", "Required");
+			var result = await controller.Login(new LoginDTO());
+			result.Should().BeOfType<BadRequestObjectResult>();
+		}
 
-            var result = await controller.Register(request);
+		[Fact]
+		public async Task Login_Unauthorized_WhenUserMissingOrPasswordWrong()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.GetUserByEmailAsync("no@x.com")).ReturnsAsync((User?)null);
+			var result1 = await controller.Login(new LoginDTO { Email = "no@x.com", Password = "123456" });
+			result1.Should().BeOfType<UnauthorizedObjectResult>();
 
-            result.Should().BeOfType<ConflictObjectResult>();
-        }
+			auth.Reset();
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 2, Email = "u@x.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), VerifyAt = DateTime.Now });
+			auth.Setup(a => a.VerifyPassword("wrong", It.IsAny<string>())).Returns(false);
+			var result2 = await controller.Login(new LoginDTO { Email = "u@x.com", Password = "wrong" });
+			result2.Should().BeOfType<UnauthorizedObjectResult>();
+		}
 
-        [Fact]
-        public async Task Register_ReturnsOk_WhenSuccessful()
-        {
-            var (controller, supabase, _, _, _, _) = BuildController();
+		[Fact]
+		public async Task Login_Unauthorized_WhenEmailNotVerified()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 2, Email = "u@x.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), VerifyAt = null });
+			auth.Setup(a => a.VerifyPassword("123456", It.IsAny<string>())).Returns(true);
+			var result = await controller.Login(new LoginDTO { Email = "u@x.com", Password = "123456" });
+			result.Should().BeOfType<UnauthorizedObjectResult>();
+		}
 
-            supabase.Setup(s => s.GetAllAsync<User>()).ReturnsAsync(new List<User>());
-            supabase.Setup(s => s.CreateAsync(It.IsAny<User>()))
-                .ReturnsAsync((User u) => { u.Id = 10; return u; });
+		[Fact]
+		public async Task Login_Conflict_WhenAdminNeedsVerification()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			var user = new User { Id = 3, Email = "admin@x.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), VerifyAt = DateTime.Now, UserType = CommonUtils.UserRoles.Admin };
+			auth.Setup(a => a.GetUserByEmailAsync(user.Email)).ReturnsAsync(user);
+			auth.Setup(a => a.VerifyPassword("123456", It.IsAny<string>())).Returns(true);
+			auth.Setup(a => a.EnsureAdminVerificationAsync(user)).ReturnsAsync(true);
+			var result = await controller.Login(new LoginDTO { Email = user.Email, Password = "123456" });
+			result.Should().BeOfType<ConflictObjectResult>();
+		}
 
-            var request = new RegisterDTO { Email = "alice@example.com", Password = "123456", UserType = "user" };
+		[Fact]
+		public async Task Login_Ok_OnSuccess()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			var user = new User { Id = 4, Email = "user@x.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), VerifyAt = DateTime.Now, UserType = "user" };
+			auth.Setup(a => a.GetUserByEmailAsync(user.Email)).ReturnsAsync(user);
+			auth.Setup(a => a.VerifyPassword("123456", It.IsAny<string>())).Returns(true);
+			auth.Setup(a => a.EnsureAdminVerificationAsync(user)).ReturnsAsync(false);
+			auth.Setup(a => a.GenerateTokenResponseAsync(user, false)).ReturnsAsync(new { access_token = "a", refresh_token = "r" });
+			var result = await controller.Login(new LoginDTO { Email = user.Email, Password = "123456" });
+			result.Should().BeOfType<OkObjectResult>();
+		}
 
-            var result = await controller.Register(request);
+		[Fact]
+		public async Task Refresh_BadRequest_WhenModelInvalid()
+		{
+			var (controller, _, _, _, _, _, _, _) = Build();
+			controller.ModelState.AddModelError("RefreshToken", "Required");
+			var result = await controller.Refresh(new RefreshDTO());
+			result.Should().BeOfType<BadRequestObjectResult>();
+		}
 
-            result.Should().BeOfType<OkObjectResult>();
-            var ok = result as OkObjectResult;
-            ok!.Value.Should().NotBeNull();
-        }
+		[Fact]
+		public async Task Refresh_Unauthorized_WhenServiceThrows()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.RefreshUsingRefreshTokenAsync("bad")).ThrowsAsync(new UnauthorizedAccessException());
+			var result = await controller.Refresh(new RefreshDTO { RefreshToken = "bad" });
+			result.Should().BeOfType<UnauthorizedObjectResult>();
+		}
 
-        [Fact]
-        public async Task Login_ReturnsBadRequest_WhenMissingFields()
-        {
-            var (controller, _, _, _, _, _) = BuildController();
-            var result = await controller.Login(new LoginDTO { Email = "", Password = "" });
-            result.Should().BeOfType<BadRequestObjectResult>();
-        }
+		[Fact]
+		public async Task Refresh_500_OnUnexpectedException()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.RefreshUsingRefreshTokenAsync("x")).ThrowsAsync(new Exception("boom"));
+			var result = await controller.Refresh(new RefreshDTO { RefreshToken = "x" });
+			(result as ObjectResult)!.StatusCode.Should().Be(500);
+		}
 
-        [Fact]
-        public async Task Login_ReturnsUnauthorized_WhenUserNotExist()
-        {
-            var (controller, supabase, _, _, _, _) = BuildController();
-            supabase.Setup(s => s.GetAllAsync<User>()).ReturnsAsync(new List<User>());
-            var result = await controller.Login(new LoginDTO { Email = "a@b.com", Password = "123456" });
-            result.Should().BeOfType<UnauthorizedObjectResult>();
-        }
+		[Fact]
+		public async Task Refresh_Ok_OnSuccess()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.RefreshUsingRefreshTokenAsync("ok")).ReturnsAsync(new { access_token = "a", refresh_token = "r" });
+			var result = await controller.Refresh(new RefreshDTO { RefreshToken = "ok" });
+			result.Should().BeOfType<OkObjectResult>();
+		}
 
-        [Fact]
-        public async Task Login_AdminFlow_ReturnsConflict_AndSendsMail()
-        {
-            var (controller, supabase, _, mail, _, _) = BuildController();
-            var users = new List<User> { new User { Id = 2, Email = "admin@site.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), UserType = "admin", CreatedAt = DateTime.Now } };
-            supabase.Setup(s => s.GetAllAsync<User>()).ReturnsAsync(users);
-            supabase.Setup(s => s.GetAllAsync<UserCodeVerify>()).ReturnsAsync(new List<UserCodeVerify>());
-            supabase.Setup(s => s.CreateAsync(It.IsAny<UserCodeVerify>())).ReturnsAsync((UserCodeVerify x) => { x.Id = 1; return x; });
+		[Fact]
+		public async Task Logout_BadRequest_WhenModelInvalid()
+		{
+			var (controller, _, _, _, _, _, _, _) = Build();
+			controller.ModelState.AddModelError("AccessToken", "Required");
+			var result = await controller.Logout(new LogoutDTO());
+			result.Should().BeOfType<BadRequestObjectResult>();
+		}
 
-            var result = await controller.Login(new LoginDTO { Email = "admin@site.com", Password = "123456" });
+		[Fact]
+		public async Task Logout_NotFound_WhenKeyNotFound()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.LogoutAsync("ref", "acc")).ThrowsAsync(new KeyNotFoundException());
+			var result = await controller.Logout(new LogoutDTO { RefreshToken = "ref", AccessToken = "acc" });
+			result.Should().BeOfType<NotFoundObjectResult>();
+		}
 
-            result.Should().BeOfType<ConflictObjectResult>();
-            mail.Verify(m => m.SendAsync(It.IsAny<MailDataReqDTO>()), Times.Once);
-        }
+		[Fact]
+		public async Task Logout_BadRequest_WhenAlreadyRevoked()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.LogoutAsync("ref", "acc")).ThrowsAsync(new InvalidOperationException());
+			var result = await controller.Logout(new LogoutDTO { RefreshToken = "ref", AccessToken = "acc" });
+			result.Should().BeOfType<BadRequestObjectResult>();
+		}
 
-        [Fact]
-        public async Task Login_UserFlow_ReturnsOk_WithTokens()
-        {
-            var (controller, supabase, token, _, _, _) = BuildController();
-            var users = new List<User> { new User { Id = 3, Email = "user@site.com", Password = BCrypt.Net.BCrypt.HashPassword("123456"), UserType = "user", CreatedAt = DateTime.Now } };
-            supabase.Setup(s => s.GetAllAsync<User>()).ReturnsAsync(users);
-            token.Setup(t => t.GenerateAccessToken(It.IsAny<IEnumerable<System.Security.Claims.Claim>>())).Returns("access-token");
-            token.Setup(t => t.GenerateRefreshToken()).Returns("refresh-token");
-            supabase.Setup(s => s.CreateAsync(It.IsAny<RefreshToken>())).ReturnsAsync((RefreshToken rt) => { rt.Id = 1; return rt; });
+		[Fact]
+		public async Task Logout_500_OnUnexpectedException()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.LogoutAsync("ref", "acc")).ThrowsAsync(new Exception("x"));
+			var result = await controller.Logout(new LogoutDTO { RefreshToken = "ref", AccessToken = "acc" });
+			(result as ObjectResult)!.StatusCode.Should().Be(500);
+		}
 
-            var result = await controller.Login(new LoginDTO { Email = "user@site.com", Password = "123456" });
+		[Fact]
+		public async Task Logout_Ok_OnSuccess()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.LogoutAsync("ref", "acc")).Returns(Task.CompletedTask);
+			var result = await controller.Logout(new LogoutDTO { RefreshToken = "ref", AccessToken = "acc" });
+			result.Should().BeOfType<OkObjectResult>();
+		}
 
-            result.Should().BeOfType<OkObjectResult>();
-        }
+		[Fact]
+		public async Task Verify_BadRequest_WhenModelInvalid()
+		{
+			var (controller, _, _, _, _, _, _, _) = Build();
+			controller.ModelState.AddModelError("Email", "Required");
+			var result = await controller.VerifyUser(new VerifyUserDTO());
+			result.Should().BeOfType<BadRequestObjectResult>();
+		}
 
-        [Fact]
-        public async Task Refresh_ReturnsBadRequest_WhenMissingToken()
-        {
-            var (controller, _, _, _, _, _) = BuildController();
-            var result = await controller.Refresh(new RefreshDTO { RefreshToken = "" });
-            result.Should().BeOfType<BadRequestObjectResult>();
-        }
+		[Fact]
+		public async Task Verify_Unauthorized_WhenUserNotFound()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.VerifyUserAndIssueTokensAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+				.ThrowsAsync(new UnauthorizedAccessException());
+			var result = await controller.VerifyUser(new VerifyUserDTO { Email = "x@y.com", UserCodeVerify = "123456" });
+			result.Should().BeOfType<UnauthorizedObjectResult>();
+		}
 
-        [Fact]
-        public async Task Refresh_ReturnsUnauthorized_WhenTokenInvalid()
-        {
-            var (controller, supabase, token, _, _, configuration) = BuildController();
-            supabase.Setup(s => s.GetAllAsync<RefreshToken>()).ReturnsAsync(new List<RefreshToken>());
-            var result = await controller.Refresh(new RefreshDTO { RefreshToken = "bad" });
-            result.Should().BeOfType<UnauthorizedObjectResult>();
-        }
+		[Fact]
+		public async Task Verify_BadRequest_WhenCodeMismatch()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.VerifyUserAndIssueTokensAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+				.ThrowsAsync(new ArgumentException());
+			var result = await controller.VerifyUser(new VerifyUserDTO { Email = "x@y.com", UserCodeVerify = "bad" });
+			result.Should().BeOfType<BadRequestObjectResult>();
+		}
 
-        [Fact]
-        public async Task Refresh_ReturnsOk_WhenValid()
-        {
-            var (controller, supabase, token, _, _, configuration) = BuildController();
-            var existingToken = new RefreshToken { Id = 1, Token = "old", UserId = 9, ExpiresAt = DateTime.Now.AddDays(1) };
-            supabase.Setup(s => s.GetAllAsync<RefreshToken>()).ReturnsAsync(new List<RefreshToken> { existingToken });
-            supabase.Setup(s => s.UpdateAsync(It.IsAny<RefreshToken>())).ReturnsAsync((RefreshToken rt) => rt);
-            supabase.Setup(s => s.CreateAsync(It.IsAny<RefreshToken>())).ReturnsAsync((RefreshToken rt) => { rt.Id = 2; return rt; });
-            supabase.Setup(s => s.GetAllAsync<User>()).ReturnsAsync(new List<User> { new User { Id = 9, Email = "x@y.com", Password = "h", UserType = "user", CreatedAt = DateTime.Now } });
-            token.Setup(t => t.GenerateAccessToken(It.IsAny<IEnumerable<System.Security.Claims.Claim>>())).Returns("new-access");
-            token.Setup(t => t.GenerateRefreshToken()).Returns("new-refresh");
+		[Fact]
+		public async Task Verify_500_OnUnexpectedException()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.VerifyUserAndIssueTokensAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+				.ThrowsAsync(new Exception("x"));
+			var result = await controller.VerifyUser(new VerifyUserDTO { Email = "x@y.com", UserCodeVerify = "123456" });
+			(result as ObjectResult)!.StatusCode.Should().Be(500);
+		}
 
-            var result = await controller.Refresh(new RefreshDTO { RefreshToken = "old" });
-            result.Should().BeOfType<OkObjectResult>();
-        }
+		[Fact]
+		public async Task Verify_Ok_OnSuccess()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.VerifyUserAndIssueTokensAsync("x@y.com", "123456", false))
+				.ReturnsAsync(new { access_token = "a", refresh_token = "r" });
+			var result = await controller.VerifyUser(new VerifyUserDTO { Email = "x@y.com", UserCodeVerify = "123456" });
+			result.Should().BeOfType<OkObjectResult>();
+		}
 
-        [Fact]
-        public async Task Logout_ReturnsBadRequest_WhenMissingTokens()
-        {
-            var (controller, _, _, _, _, _) = BuildController();
-            var result = await controller.Logout(new LogoutDTO { AccessToken = " ", RefreshToken = " " });
-            result.Should().BeOfType<BadRequestObjectResult>();
-        }
+		[Fact]
+		public async Task VerifyEmail_BadRequest_WhenTokenMissing()
+		{
+			var (controller, _, _, _, _, _, _, _) = Build();
+			var result = await controller.VerifyEmail("");
+			result.Should().BeOfType<BadRequestObjectResult>();
+		}
 
-        [Fact]
-        public async Task Logout_ReturnsNotFound_WhenRefreshTokenNotFound()
-        {
-            var (controller, supabase, _, _, _, _) = BuildController();
-            supabase.Setup(s => s.GetAllAsync<RefreshToken>()).ReturnsAsync(new List<RefreshToken>());
-            var result = await controller.Logout(new LogoutDTO { AccessToken = "acc", RefreshToken = "ref" });
-            result.Should().BeOfType<NotFoundObjectResult>();
-        }
+		[Fact]
+		public async Task VerifyEmail_BadRequest_WhenTokenInvalid()
+		{
+			var (controller, _, token, _, _, _, _, _) = Build();
+			string ignored;
+			token.Setup(t => t.TryValidateEmailVerificationToken("bad", out ignored)).Returns(false);
+			var result = await controller.VerifyEmail("bad");
+			result.Should().BeOfType<BadRequestObjectResult>();
+		}
 
-        [Fact]
-        public async Task Logout_ReturnsOk_WhenSuccess()
-        {
-            var (controller, supabase, _, _, blacklist, _) = BuildController();
-            var stored = new RefreshToken { Id = 5, Token = "ref", UserId = 2, ExpiresAt = DateTime.Now.AddDays(1), RevokedAt = null };
-            supabase.Setup(s => s.GetAllAsync<RefreshToken>()).ReturnsAsync(new List<RefreshToken> { stored });
-            supabase.Setup(s => s.UpdateAsync(It.IsAny<RefreshToken>())).ReturnsAsync((RefreshToken rt) => rt);
-            blacklist.Setup(b => b.AddTokenToBlacklistAsync("acc", 2, It.IsAny<string>())).ReturnsAsync(true);
+		[Fact]
+		public async Task VerifyEmail_Unauthorized_WhenUserNotFound()
+		{
+			var (controller, _, token, _, _, auth, _, _) = Build();
+			string email;
+			token.Setup(t => t.TryValidateEmailVerificationToken("tok", out email)).Callback(new TryValidateDelegate((string _, out string e) => e = "u@x.com")).Returns(true);
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync((User?)null);
+			var result = await controller.VerifyEmail("tok");
+			result.Should().BeOfType<UnauthorizedObjectResult>();
+		}
 
-            var result = await controller.Logout(new LogoutDTO { AccessToken = "acc", RefreshToken = "ref" });
-            result.Should().BeOfType<OkObjectResult>();
-        }
+		private delegate void TryValidateDelegate(string token, out string email);
 
-        [Fact]
-        public async Task Verify_ReturnsBadRequest_WhenInvalid()
-        {
-            var (controller, _, _, _, _, _) = BuildController();
-            var result = await controller.VerifyUser(new VerifyUserDTO { Email = " ", UserCodeVerify = " " });
-            result.Should().BeOfType<BadRequestObjectResult>();
-        }
+		[Fact]
+		public async Task VerifyEmail_Redirect_OnSuccess_UsesConfiguredFrontend()
+		{
+			var (controller, _, token, _, _, auth, configuration, _) = Build();
+			string email;
+			token.Setup(t => t.TryValidateEmailVerificationToken("tok", out email)).Callback(new TryValidateDelegate((string _, out string e) => e = "u@x.com")).Returns(true);
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 5, Email = "u@x.com" });
+			auth.Setup(a => a.UpdateUserAsync(It.IsAny<User>())).Returns(Task.CompletedTask);
+			var result = await controller.VerifyEmail("tok");
+			result.Should().BeOfType<RedirectResult>();
+			(result as RedirectResult)!.Url!.Should().StartWith("http://frontend.local/login?verified=true");
+		}
 
-        [Fact]
-        public async Task Verify_ReturnsUnauthorized_WhenUserNotFound()
-        {
-            var (controller, supabase, _, _, _, _) = BuildController();
-            supabase.Setup(s => s.GetAllAsync<User>()).ReturnsAsync(new List<User>());
-            var result = await controller.VerifyUser(new VerifyUserDTO { Email = "x@y.com", UserCodeVerify = "123456" });
-            result.Should().BeOfType<UnauthorizedObjectResult>();
-        }
+		[Fact]
+		public async Task VerifyEmail_Redirect_OnSuccess_UsesOriginHeaderWhenNoConfig()
+		{
+			var (controller, _, token, _, _, auth, _, _) = Build();
+			// override Frontend:BaseUrl to be empty
+			(controller.ControllerContext.HttpContext!.Request.Headers)["Origin"] = "http://origin.local";
+			string email;
+			token.Setup(t => t.TryValidateEmailVerificationToken("tok", out email)).Callback(new TryValidateDelegate((string _, out string e) => e = "u@x.com")).Returns(true);
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 6, Email = "u@x.com" });
+			auth.Setup(a => a.UpdateUserAsync(It.IsAny<User>())).Returns(Task.CompletedTask);
+			var result = await controller.VerifyEmail("tok");
+			result.Should().BeOfType<RedirectResult>();
+			(result as RedirectResult)!.Url!.Should().StartWith("http://frontend.local/login?verified=true");
+		}
 
-        [Fact]
-        public async Task Verify_ReturnsOk_WhenCodeMatches()
-        {
-            var (controller, supabase, token, _, _, _) = BuildController();
-            var user = new User { Id = 7, Email = "u@y.com", Password = "h", UserType = "user", CreatedAt = DateTime.Now };
-            supabase.Setup(s => s.GetAllAsync<User>()).ReturnsAsync(new List<User> { user });
-            supabase.Setup(s => s.GetAllAsync<UserCodeVerify>()).ReturnsAsync(new List<UserCodeVerify> { new UserCodeVerify { Id = 1, UserId = 7, VerifyCode = "654321", Status = 1 } });
-            token.Setup(t => t.GenerateAccessToken(It.IsAny<IEnumerable<System.Security.Claims.Claim>>())).Returns("ac");
-            token.Setup(t => t.GenerateRefreshToken()).Returns("rf");
-            supabase.Setup(s => s.CreateAsync(It.IsAny<RefreshToken>())).ReturnsAsync((RefreshToken rt) => { rt.Id = 11; return rt; });
+		[Fact]
+		public async Task SendMail_BadRequest_WhenEmailMissingOrInvalid()
+		{
+			var (controller, _, _, _, _, _, _, _) = Build();
+			var r1 = await controller.SendMail("");
+			r1.Should().BeOfType<BadRequestObjectResult>();
+			var r2 = await controller.SendMail("invalid");
+			r2.Should().BeOfType<BadRequestObjectResult>();
+		}
 
-            var result = await controller.VerifyUser(new VerifyUserDTO { Email = "u@y.com", UserCodeVerify = "654321" });
-            result.Should().BeOfType<OkObjectResult>();
-        }
+		[Fact]
+		public async Task SendMail_Unauthorized_WhenUserNotFound()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.ResendVerificationCodeAsync("u@x.com")).ThrowsAsync(new UnauthorizedAccessException());
+			var result = await controller.SendMail("u@x.com");
+			result.Should().BeOfType<UnauthorizedObjectResult>();
+		}
 
-        [Fact]
-        public async Task SendMail_ReturnsBadRequest_WhenInvalidEmail()
-        {
-            var (controller, _, _, _, _, _) = BuildController();
-            var result = await controller.SendMail("");
-            result.Should().BeOfType<BadRequestObjectResult>();
-        }
+		[Fact]
+		public async Task SendMail_Ok_OnSuccess()
+		{
+			var (controller, _, _, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.ResendVerificationCodeAsync("u@x.com")).Returns(Task.CompletedTask);
+			var result = await controller.SendMail("u@x.com");
+			result.Should().BeOfType<OkObjectResult>();
+		}
 
-        [Fact]
-        public async Task SendMail_ReturnsUnauthorized_WhenUserNotFound()
-        {
-            var (controller, supabase, _, _, _, _) = BuildController();
-            supabase.Setup(s => s.GetAllAsync<User>()).ReturnsAsync(new List<User>());
-            var result = await controller.SendMail("x@y.com");
-            result.Should().BeOfType<UnauthorizedObjectResult>();
-        }
+		[Fact]
+		public async Task ForgotPassword_BadRequest_WhenModelInvalidOrEmailIssues()
+		{
+			var (controller, _, _, _, _, _, _, _) = Build();
+			controller.ModelState.AddModelError("Email", "Required");
+			var r0 = await controller.ForgotPassword(new ForgotPasswordDTO());
+			r0.Should().BeOfType<BadRequestObjectResult>();
 
-        [Fact]
-        public async Task SendMail_ReturnsOk_WhenSuccess()
-        {
-            var (controller, supabase, _, mail, _, _) = BuildController();
-            var user = new User { Id = 8, Email = "m@y.com", Password = "h", UserType = "user", CreatedAt = DateTime.Now };
-            supabase.Setup(s => s.GetAllAsync<User>()).ReturnsAsync(new List<User> { user });
-            supabase.Setup(s => s.GetAllAsync<UserCodeVerify>()).ReturnsAsync(new List<UserCodeVerify> { new UserCodeVerify { Id = 2, UserId = 8, VerifyCode = "111111", Status = 1 } });
-            supabase.Setup(s => s.UpdateAsync(It.IsAny<UserCodeVerify>())).ReturnsAsync((UserCodeVerify v) => v);
+			controller.ModelState.Clear();
+			var r1 = await controller.ForgotPassword(new ForgotPasswordDTO { Email = " " });
+			r1.Should().BeOfType<BadRequestObjectResult>();
 
-            var result = await controller.SendMail("m@y.com");
+			var r2 = await controller.ForgotPassword(new ForgotPasswordDTO { Email = "invalid" });
+			r2.Should().BeOfType<BadRequestObjectResult>();
+		}
 
-            result.Should().BeOfType<OkObjectResult>();
-            mail.Verify(m => m.SendAsync(It.IsAny<MailDataReqDTO>()), Times.Once);
-        }
-    }
+		[Fact]
+		public async Task ForgotPassword_Unauthorized_WhenUserMissingOrUnverified()
+		{
+			var (controller, _, token, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync((User?)null);
+			var r1 = await controller.ForgotPassword(new ForgotPasswordDTO { Email = "u@x.com" });
+			r1.Should().BeOfType<UnauthorizedObjectResult>();
+
+			auth.Reset();
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 1, Email = "u@x.com", VerifyAt = null });
+			var r2 = await controller.ForgotPassword(new ForgotPasswordDTO { Email = "u@x.com" });
+			r2.Should().BeOfType<UnauthorizedObjectResult>();
+		}
+
+		[Fact]
+		public async Task ForgotPassword_Ok_OnSuccess()
+		{
+			var (controller, _, token, _, _, auth, _, _) = Build();
+			auth.Setup(a => a.GetUserByEmailAsync("u@x.com")).ReturnsAsync(new User { Id = 2, Email = "u@x.com", VerifyAt = DateTime.Now });
+			token.Setup(t => t.GeneratePasswordResetToken("u@x.com")).Returns("reset-token");
+			controller.ControllerContext.HttpContext!.Request.Headers["Origin"] = "http://origin.local";
+			auth.Setup(a => a.SendPasswordResetEmailAsync("u@x.com", It.Is<string>(s => s.Contains("reset-password")))).Returns(Task.CompletedTask);
+			var result = await controller.ForgotPassword(new ForgotPasswordDTO { Email = "u@x.com" });
+			result.Should().BeOfType<OkObjectResult>();
+		}
+
+		[Fact]
+		public async Task ResetPassword_BadRequest_WhenModelInvalid()
+		{
+			var (controller, _, _, _, _, _, _, _) = Build();
+			controller.ModelState.AddModelError("Token", "Required");
+			var result = await controller.ResetPassword(new ResetPasswordDTO());
+			result.Should().BeOfType<BadRequestObjectResult>();
+		}
+
+		[Fact]
+		public async Task ResetPassword_Unauthorized_WhenTokenInvalidOrUserMissing()
+		{
+			var (controller, _, token, _, _, auth, _, _) = Build();
+			string email;
+			string ignored;
+			token.Setup(t => t.TryValidatePasswordResetToken("bad", out ignored)).Returns(false);
+			var r1 = await controller.ResetPassword(new ResetPasswordDTO { Token = "bad", NewPassword = "123456" });
+			r1.Should().BeOfType<UnauthorizedObjectResult>();
+
+			token.Setup(t => t.TryValidatePasswordResetToken("ok", out email)).Callback(new TryValidateDelegate((string _, out string e) => e = "u@x.com")).Returns(true);
+			auth.Setup(a => a.ResetPasswordAsync("u@x.com", "123456")).ThrowsAsync(new UnauthorizedAccessException());
+			var r2 = await controller.ResetPassword(new ResetPasswordDTO { Token = "ok", NewPassword = "123456" });
+			r2.Should().BeOfType<UnauthorizedObjectResult>();
+		}
+
+		[Fact]
+		public async Task ResetPassword_Ok_OnSuccess()
+		{
+			var (controller, _, token, _, _, auth, _, _) = Build();
+			string email;
+			token.Setup(t => t.TryValidatePasswordResetToken("ok", out email)).Callback(new TryValidateDelegate((string _, out string e) => e = "u@x.com")).Returns(true);
+			auth.Setup(a => a.ResetPasswordAsync("u@x.com", "123456")).Returns(Task.CompletedTask);
+			var result = await controller.ResetPassword(new ResetPasswordDTO { Token = "ok", NewPassword = "123456" });
+			result.Should().BeOfType<OkObjectResult>();
+		}
+	}
 }

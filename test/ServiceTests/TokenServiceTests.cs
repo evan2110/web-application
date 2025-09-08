@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Moq;
 using server.Services;
 using System.Security.Claims;
@@ -11,6 +12,7 @@ namespace test.ServiceTests
         private (TokenService service, Mock<IBlacklistService> blacklist, IConfiguration config) Build()
         {
             var blacklist = new Mock<IBlacklistService>();
+            var logger = new Mock<ILogger<TokenService>>();
             var settings = new Dictionary<string, string?>
             {
                 { "Jwt:Issuer", "issuer" },
@@ -19,7 +21,7 @@ namespace test.ServiceTests
                 { "Jwt:AccessTokenExpirationMinutes", "5" }
             };
             var config = new ConfigurationBuilder().AddInMemoryCollection(settings!).Build();
-            var service = new TokenService(config, blacklist.Object);
+            var service = new TokenService(config, blacklist.Object, logger.Object);
             return (service, blacklist, config);
         }
 
