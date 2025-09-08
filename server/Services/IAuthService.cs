@@ -15,8 +15,10 @@ namespace server.Services
 		Task ResendVerificationCodeAsync(string email);
 		Task<object> GenerateTokenResponseAsync(User user, bool rememberMe = false);
 		Task SendVerificationEmailAsync(string toEmail, string code);
+		Task SendEmailVerificationLinkAsync(string toEmail, string verifyLink);
 		Task SendPasswordResetEmailAsync(string toEmail, string resetLink);
 		Task ResetPasswordAsync(string email, string newPassword);
+		Task UpdateUserAsync(User user);
 	}
 }
 

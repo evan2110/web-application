@@ -25,5 +25,8 @@ namespace server.Models
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
+
+		[Column("verify_at")]
+		public DateTime? VerifyAt { get; set; }
     }
 }

@@ -13,6 +13,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
   const [showVerifyCode, setShowVerifyCode] = useState(false);
   const [verificationData, setVerificationData] = useState(null);
   const [loginCredentials, setLoginCredentials] = useState(null);
@@ -27,8 +28,16 @@ const Login = () => {
   useEffect(() => {
     document.title = 'Login - React App';
     
-    // Check if user just registered
-    if (location.search.includes('registered=true')) {
+    // Show toast after registration or verification redirect
+    const params = new URLSearchParams(location.search);
+    const registered = params.get('registered') === 'true';
+    const verified = params.get('verified') === 'true';
+    if (registered || verified) {
+      setToastMessage(
+        registered
+          ? 'Registration successful! Please check your email to verify your account.'
+          : 'Email verified successfully. You can now log in.'
+      );
       setShowToast(true);
       // Clean up URL
       navigate('/login', { replace: true });
@@ -228,7 +237,7 @@ const Login = () => {
       
       {showToast && (
         <Toast
-          message="Registration successful!"
+          message={toastMessage || 'Success'}
           type="success"
           duration={3000}
           onClose={() => setShowToast(false)}

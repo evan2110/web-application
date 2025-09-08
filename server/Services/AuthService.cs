@@ -71,6 +71,12 @@ namespace server.Services
 				throw new Exception("Failed to create user");
 			}
 			_logger.LogInformation("User created successfully with id {UserId}", createdUser.Id);
+
+			// Send email verification link for all users upon registration
+			var verifyToken = _tokenService.GenerateEmailVerificationToken(createdUser.Email);
+			var backendBaseUrl = _configuration["Backend:BaseUrl"] ?? _configuration["ASPNETCORE_URLS"] ?? "https://localhost:7297";
+			var verifyLink = $"{backendBaseUrl}/api/Auth/verify-email?token={Uri.EscapeDataString(verifyToken)}";
+			await SendEmailVerificationLinkAsync(createdUser.Email, verifyLink);
 			return createdUser;
 		}
 
@@ -229,6 +235,30 @@ namespace server.Services
 			mailDataReq.Body = bodyHtml;
 
 			await _mailService.SendAsync(mailDataReq);
+		}
+
+		public async Task SendEmailVerificationLinkAsync(string toEmail, string verifyLink)
+		{
+			_logger.LogInformation("Sending email verification link to {Email}", toEmail);
+			MailDataReqDTO mailDataReq = new MailDataReqDTO();
+			mailDataReq.ToEmail = toEmail;
+			mailDataReq.Subject = "Verify your email";
+
+			string bodyHtml = "<html><body>";
+			bodyHtml += "<h1>Email verification</h1>";
+			bodyHtml += "<p>Hello " + toEmail + ",</p>";
+			bodyHtml += "<p>Please confirm your email by clicking the link below:</p>";
+			bodyHtml += $"<p><a href=\"{verifyLink}\">Verify your email</a></p>";
+			bodyHtml += "</body></html>";
+
+			mailDataReq.Body = bodyHtml;
+
+			await _mailService.SendAsync(mailDataReq);
+		}
+
+		public async Task UpdateUserAsync(User user)
+		{
+			await _supabaseService.UpdateAsync(user);
 		}
 
 		public async Task<object> VerifyUserAndIssueTokensAsync(string email, string verifyCode, bool rememberMe)

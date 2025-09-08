@@ -132,6 +132,9 @@ export const AuthProvider = ({ children }) => {
           email: email,
           message: data.message || 'Please verify your email to complete login.'
         };
+      } else if (response.status === 401 && (data?.message || '').toLowerCase().includes('verify')) {
+        // Blocked due to unverified email
+        return { success: false, error: data.message || 'Please verify your email before logging in.' };
       } else {
         // Login failed
         return { success: false, error: data.message || 'Login failed. Please try again.' };

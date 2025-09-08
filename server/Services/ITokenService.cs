@@ -10,5 +10,7 @@ namespace server.Services
         Task<bool> ValidateAccessTokenWithBlacklistAsync(string token);
         string GeneratePasswordResetToken(string email);
         bool TryValidatePasswordResetToken(string token, out string email);
+        string GenerateEmailVerificationToken(string email);
+        bool TryValidateEmailVerificationToken(string token, out string email);
     }
 }

@@ -57,15 +57,7 @@ namespace server.Controllers
                     return StatusCode(500, new { message = _messages.Get(CommonUtils.MessageCodes.FailedCreateUser) });
                 }
 
-                var userDto = new UserDto
-                {
-                    Id = createdUser.Id,
-                    Email = createdUser.Email,
-                    UserType = createdUser.UserType,
-                    CreatedAt = createdUser.CreatedAt
-                };
-
-                return Ok(userDto);
+                return Ok(new { message = "Registration successful. Please check your email to verify your account." });
             }
             catch (Exception ex)
             {
@@ -88,6 +80,9 @@ namespace server.Controllers
 
                 if (user == null || !_authService.VerifyPassword(request.Password, user.Password))
                     return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.InvalidEmailOrPassword) });
+
+                if (user.VerifyAt == null)
+                    return Unauthorized(new { message = "Please verify your email before logging in." });
 
                 if (await _authService.EnsureAdminVerificationAsync(user))
                     return Conflict(new { message = _messages.Get(CommonUtils.MessageCodes.PleaseAuthenticateLogin) });
@@ -187,6 +182,38 @@ namespace server.Controllers
             }
         }
 
+        [HttpGet("verify-email")]
+        public async Task<IActionResult> VerifyEmail([FromQuery] string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return BadRequest(new { message = "Invalid verification link." });
+
+            try
+            {
+                if (!_tokenService.TryValidateEmailVerificationToken(token, out var email))
+                    return BadRequest(new { message = "Invalid or expired verification link." });
+
+                var user = await _authService.GetUserByEmailAsync(email);
+                if (user == null)
+                    return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.UserNotFound) });
+
+                user.VerifyAt = DateTime.Now;
+                await _authService.UpdateUserAsync(user);
+
+                var configuredFrontend = _configuration["Frontend:BaseUrl"];
+                var frontendBaseUrl = !string.IsNullOrWhiteSpace(configuredFrontend)
+                    ? configuredFrontend
+                    : (Request.Headers["Origin"].FirstOrDefault() ?? "http://localhost:3000");
+                var redirectUrl = $"{frontendBaseUrl}/login?verified=true";
+                return Redirect(redirectUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during email verification");
+                return StatusCode(500, new { message = _messages.Get(CommonUtils.MessageCodes.InternalServerError) });
+            }
+        }
+
         [HttpGet("sendMail")]
         public async Task<IActionResult> SendMail(string email)
         {
@@ -234,6 +261,15 @@ namespace server.Controllers
             try
             {
                 _logger.LogInformation("Password reset requested for {Email}", request.Email);
+                var user = await _authService.GetUserByEmailAsync(request.Email);
+                if (user == null)
+                {
+                    return Unauthorized(new { message = _messages.Get(CommonUtils.MessageCodes.UserNotFound) });
+                }
+                if (user.VerifyAt == null)
+                {
+                    return Unauthorized(new { message = "Please verify your email before requesting a password reset." });
+                }
                 var resetToken = _tokenService.GeneratePasswordResetToken(request.Email);
                 var frontendBaseUrl = Request.Headers["Origin"].FirstOrDefault() ?? "http://localhost:3000";
                 var resetLink = $"{frontendBaseUrl}/reset-password?token={WebUtility.UrlEncode(resetToken)}";
